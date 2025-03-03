@@ -46,16 +46,15 @@ class RegisterActivity : ComponentActivity() {
                                 .set(user)
                                 .addOnSuccessListener {
                                     Toast.makeText(this, "Registration successful", Toast.LENGTH_SHORT).show()
-
-                                    // Redirect to LoginActivity after successful registration
-                                    val intent = Intent(this, LoginActivity::class.java)
-                                    startActivity(intent)
-                                    finish() // Close RegisterActivity so user cannot go back to it
                                 }
                                 .addOnFailureListener { exception ->
                                     Toast.makeText(this, "Error saving user data: ${exception.message}", Toast.LENGTH_SHORT).show()
                                 }
                         }
+                        // Redirect to LoginActivity after successful registration
+                        val intent = Intent(this, LoginActivity::class.java)
+                        startActivity(intent)
+                        finish() // Close RegisterActivity so user cannot go back to it
                     } else {
                         Toast.makeText(this, "Registration failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
                     }
