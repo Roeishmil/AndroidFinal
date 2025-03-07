@@ -10,7 +10,10 @@ import com.rs.photoshare.models.ArtPiece
 import com.squareup.picasso.Picasso
 import java.io.File
 
-class ArtPieceAdapter(private val artPieces: List<ArtPiece>) : RecyclerView.Adapter<ArtPieceAdapter.ArtPieceViewHolder>() {
+class ArtPieceAdapter(
+    private val artPieces: List<ArtPiece>,
+    private val onItemClick: (ArtPiece) -> Unit
+) : RecyclerView.Adapter<ArtPieceAdapter.ArtPieceViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ArtPieceViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.art_piece_item, parent, false)
@@ -18,26 +21,24 @@ class ArtPieceAdapter(private val artPieces: List<ArtPiece>) : RecyclerView.Adap
     }
 
     override fun onBindViewHolder(holder: ArtPieceViewHolder, position: Int) {
-        holder.bind(artPieces[position])
+        holder.bind(artPieces[position], onItemClick)
     }
 
     override fun getItemCount(): Int = artPieces.size
 
     class ArtPieceViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val title: TextView = itemView.findViewById(R.id.artPieceTitle)
-        private val description: TextView = itemView.findViewById(R.id.artPieceDescription)
+        private val titleTextView: TextView = itemView.findViewById(R.id.artPieceTitle)
+        private val descriptionTextView: TextView = itemView.findViewById(R.id.artPieceDescription)
         private val imageView: ImageView = itemView.findViewById(R.id.artPieceImage)
+        private val tagTextView: TextView = itemView.findViewById(R.id.artPieceTag)
 
-        fun bind(artPiece: ArtPiece) {
-            title.text = artPiece.title
-            description.text = artPiece.description
+        fun bind(artPiece: ArtPiece, onItemClick: (ArtPiece) -> Unit) {
+            titleTextView.text = artPiece.title
+            descriptionTextView.text = artPiece.description
+            tagTextView.text = artPiece.tags.firstOrNull() ?: "No Tag"
+            Picasso.get().load(File(artPiece.imageUrl)).into(imageView)
 
-            val file = File(artPiece.imageUrl)
-            if (file.exists()) {
-                Picasso.get().load(file).into(imageView)
-            } else {
-                imageView.setImageResource(R.drawable.placeholder_image)
-            }
+            itemView.setOnClickListener { onItemClick(artPiece) }
         }
     }
 }

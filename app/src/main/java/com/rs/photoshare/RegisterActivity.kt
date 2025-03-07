@@ -2,8 +2,10 @@ package com.rs.photoshare
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import com.google.firebase.auth.FirebaseAuth
@@ -18,6 +20,7 @@ class RegisterActivity : ComponentActivity() {
         val emailEditText: EditText = findViewById(R.id.emailEditText)
         val passwordEditText: EditText = findViewById(R.id.passwordEditText)
         val registerButton: Button = findViewById(R.id.registerButton)
+        val progressBar: ProgressBar = findViewById(R.id.progressBar)
 
         val auth = FirebaseAuth.getInstance()
         val firestore = FirebaseFirestore.getInstance()
@@ -32,6 +35,8 @@ class RegisterActivity : ComponentActivity() {
                 return@setOnClickListener
             }
 
+            progressBar.visibility = View.VISIBLE
+
             auth.createUserWithEmailAndPassword(email, password)
                 .addOnCompleteListener { task ->
                     if (task.isSuccessful) {
@@ -45,17 +50,18 @@ class RegisterActivity : ComponentActivity() {
                             firestore.collection("users").document(userId)
                                 .set(user)
                                 .addOnSuccessListener {
+                                    progressBar.visibility = View.GONE
                                     Toast.makeText(this, "Registration successful", Toast.LENGTH_SHORT).show()
+                                    startActivity(Intent(this, LoginActivity::class.java))
+                                    finish()
                                 }
                                 .addOnFailureListener { exception ->
+                                    progressBar.visibility = View.GONE
                                     Toast.makeText(this, "Error saving user data: ${exception.message}", Toast.LENGTH_SHORT).show()
                                 }
                         }
-                        // Redirect to LoginActivity after successful registration
-                        val intent = Intent(this, LoginActivity::class.java)
-                        startActivity(intent)
-                        finish() // Close RegisterActivity so user cannot go back to it
                     } else {
+                        progressBar.visibility = View.GONE
                         Toast.makeText(this, "Registration failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
                     }
                 }

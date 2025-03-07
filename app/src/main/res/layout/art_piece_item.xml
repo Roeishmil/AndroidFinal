@@ -40,4 +40,16 @@
         app:layout_constraintTop_toBottomOf="@id/artPieceTitle"
         android:paddingStart="16dp" />
 
+    <TextView
+        android:id="@+id/artPieceTag"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tag"
+        android:textSize="12sp"
+        android:textStyle="italic"
+        android:layout_marginTop="4dp"
+        app:layout_constraintTop_toBottomOf="@id/artPieceDescription"
+        app:layout_constraintStart_toStartOf="@id/artPieceDescription"/>
+
+
 </androidx.constraintlayout.widget.ConstraintLayout>

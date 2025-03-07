@@ -1,36 +1,35 @@
 package com.rs.photoshare
 
 import ArtPieceAdapter
-import android.app.Activity
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.net.Uri
 import android.os.Bundle
-import android.provider.MediaStore
+import android.util.Log
+import android.view.View
 import android.widget.Button
-import android.widget.ImageView
+import android.widget.FrameLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.gson.Gson
 import com.rs.photoshare.models.ArtPiece
 import java.io.File
-import java.io.FileOutputStream
-import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var artPiecesRecyclerView: RecyclerView
     private lateinit var artPieceAdapter: ArtPieceAdapter
+    private lateinit var imageUploadManager: ImageUploadManager
+
+
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
-    private val localArtPieces = mutableListOf<ArtPiece>()  // Local cache for art pieces
-    private var imageUri: Uri? = null  // Store picked image URI
+    private val localArtPieces = mutableListOf<ArtPiece>()
+
+    private val gson = Gson()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,92 +38,114 @@ class MainActivity : AppCompatActivity() {
         val userNameText: TextView = findViewById(R.id.userNameText)
         val logoutButton: Button = findViewById(R.id.logoutButton)
         val uploadArtButton: Button = findViewById(R.id.uploadArtButton)
-        artPiecesRecyclerView = findViewById(R.id.artPiecesRecyclerView)
+        val clearPostsButton: Button = findViewById(R.id.clearPostsButton)
 
+        artPiecesRecyclerView = findViewById(R.id.artPiecesRecyclerView)
         artPiecesRecyclerView.layoutManager = LinearLayoutManager(this)
 
-        loadArtPieces()
+        imageUploadManager = ImageUploadManager(
+            context = this,
+            firestore = firestore,
+            auth = auth,
+            progressBar = findViewById(R.id.progressBar),   // NEW
+            onArtPieceUploaded = { artPiece ->
+                saveArtPieceToJson(artPiece)
+                localArtPieces.add(artPiece)
+                updateRecyclerView()
+            },
+        )
 
-        // Set welcome text
-        val userId = auth.currentUser?.uid
-        if (userId != null) {
-            firestore.collection("users").document(userId).get()
-                .addOnSuccessListener { document ->
-                    val userName = document.getString("name") ?: "User"
-                    userNameText.text = "Welcome, $userName!"
-                }
-        }
 
-        // Open image picker when upload button is clicked
-        uploadArtButton.setOnClickListener {
-            pickImageFromGallery()
-        }
+        uploadArtButton.setOnClickListener { imageUploadManager.startImagePicker(resultLauncher) }
+        clearPostsButton.setOnClickListener { clearAllLocalArtPieces() }
 
-        // Logout logic
         logoutButton.setOnClickListener {
             auth.signOut()
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
         }
-    }
 
-    // Opens gallery for selecting an image
-    private fun pickImageFromGallery() {
-        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
-        resultLauncher.launch(intent)
-    }
+        loadArtPieces()
 
-    // Handle result from gallery picker
-    private val resultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            imageUri = result.data!!.data
-            saveImageLocallyAndCreateArtPiece()
+        auth.currentUser?.uid?.let { userId ->
+            firestore.collection("users").document(userId).get()
+                .addOnSuccessListener { document ->
+                    userNameText.text = "Welcome, ${document.getString("name") ?: "User"}!"
+                }
         }
     }
 
-    // Save image locally and create new ArtPiece
-    private fun saveImageLocallyAndCreateArtPiece() {
-        val imageUri = imageUri ?: return
-        val fileName = "art_${UUID.randomUUID()}.jpg"
-        val file = File(filesDir, fileName)
+    private val resultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        imageUploadManager.handleImageResult(result.resultCode, result.data)
+    }
 
-        try {
-            contentResolver.openInputStream(imageUri)?.use { inputStream ->
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                FileOutputStream(file).use { outputStream ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+    private fun updateRecyclerView() {
+        artPieceAdapter = ArtPieceAdapter(localArtPieces) { artPiece ->
+            openArtPieceFragment(artPiece)
+        }
+        artPiecesRecyclerView.adapter = artPieceAdapter
+    }
+
+    private fun openArtPieceFragment(artPiece: ArtPiece) {
+        findViewById<RecyclerView>(R.id.artPiecesRecyclerView).visibility = View.GONE
+        findViewById<FrameLayout>(R.id.fragmentContainer).apply {
+            visibility = View.VISIBLE
+            layoutParams.height = 0  // Expand to full height (ConstraintLayout will stretch it)
+            requestLayout()
+        }
+
+        val fragment = ArtPieceFragment.newInstance(artPiece)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment)
+            .addToBackStack(null)
+            .commit()
+    }
+
+
+    fun showRecyclerView() {
+        findViewById<RecyclerView>(R.id.artPiecesRecyclerView).visibility = View.VISIBLE
+        findViewById<FrameLayout>(R.id.fragmentContainer).visibility = View.GONE
+    }
+
+
+
+
+    private fun loadArtPieces() {
+        localArtPieces.clear()
+
+        val files = filesDir.listFiles { file -> file.extension == "jpg" } ?: emptyArray()
+
+        for (imageFile in files) {
+            val metadataFile = File(imageFile.parent, imageFile.nameWithoutExtension + ".json")
+
+            if (metadataFile.exists()) {
+                val artPiece = readArtPieceFromJson(metadataFile)
+                if (artPiece != null) {
+                    localArtPieces.add(artPiece)
                 }
             }
-
-            // Add new art piece using local file path
-            val newArtPiece = ArtPiece(
-                artId = UUID.randomUUID().toString(),
-                title = "Local Test Art",
-                description = "This is a locally stored art piece.",
-                imageUrl = file.absolutePath,
-                tags = listOf("local", "art"),
-                creatorId = auth.currentUser?.uid ?: "unknown",
-                timestamp = System.currentTimeMillis()
-            )
-
-            localArtPieces.add(newArtPiece)
-            updateRecyclerView()
-
-            Toast.makeText(this, "Art piece added!", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "Failed to save image: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-    }
 
-    // Load art pieces (in this case, only from local cache)
-    private fun loadArtPieces() {
         updateRecyclerView()
     }
 
-    // Refresh RecyclerView with current art pieces
-    private fun updateRecyclerView() {
-        artPieceAdapter = ArtPieceAdapter(localArtPieces)
-        artPiecesRecyclerView.adapter = artPieceAdapter
+    private fun readArtPieceFromJson(file: File): ArtPiece? {
+        return try {
+            gson.fromJson(file.readText(), ArtPiece::class.java)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to read JSON for ${file.name}: ${e.message}")
+            null
+        }
+    }
+
+    private fun saveArtPieceToJson(artPiece: ArtPiece) {
+        val metadataFile = File(filesDir, "art_${artPiece.artId}.json")
+        metadataFile.writeText(gson.toJson(artPiece))
+    }
+
+    private fun clearAllLocalArtPieces() {
+        filesDir.listFiles { file -> file.extension in setOf("jpg", "json") }?.forEach { it.delete() }
+        localArtPieces.clear()
+        updateRecyclerView()
     }
 }
