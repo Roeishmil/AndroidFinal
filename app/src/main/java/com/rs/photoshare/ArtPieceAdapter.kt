@@ -24,8 +24,6 @@ class ArtPieceAdapter(
         holder.bind(artPieces[position], onItemClick)
     }
 
-    override fun getItemCount(): Int = artPieces.size
-
     class ArtPieceViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val titleTextView: TextView = itemView.findViewById(R.id.artPieceTitle)
         private val descriptionTextView: TextView = itemView.findViewById(R.id.artPieceDescription)
@@ -36,9 +34,15 @@ class ArtPieceAdapter(
             titleTextView.text = artPiece.title
             descriptionTextView.text = artPiece.description
             tagTextView.text = artPiece.tags.firstOrNull() ?: "No Tag"
+
+            // Force Picasso to reload the image
+            Picasso.get().invalidate(File(artPiece.imageUrl))
             Picasso.get().load(File(artPiece.imageUrl)).into(imageView)
 
             itemView.setOnClickListener { onItemClick(artPiece) }
         }
     }
+
+    override fun getItemCount(): Int = artPieces.size
+
 }

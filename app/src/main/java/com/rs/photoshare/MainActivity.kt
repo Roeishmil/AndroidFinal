@@ -148,4 +148,16 @@ class MainActivity : AppCompatActivity() {
         localArtPieces.clear()
         updateRecyclerView()
     }
+
+    fun refreshArtPieces(forceImageReload: Boolean = false) {
+        loadArtPieces()
+
+        // Force Picasso to reload images by clearing the cache
+        if (forceImageReload) {
+            artPieceAdapter.notifyDataSetChanged()
+        }
+    }
+
+
+    companion object
 }
