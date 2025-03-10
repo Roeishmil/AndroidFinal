@@ -1,4 +1,3 @@
-import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -11,17 +10,13 @@ import com.squareup.picasso.Picasso
 import java.io.File
 
 class ArtPieceAdapter(
-    private val artPieces: List<ArtPiece>,
+    private var artPieces: List<ArtPiece>,
     private val onItemClick: (ArtPiece) -> Unit
 ) : RecyclerView.Adapter<ArtPieceAdapter.ArtPieceViewHolder>() {
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ArtPieceViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.art_piece_item, parent, false)
-        return ArtPieceViewHolder(view)
-    }
-
-    override fun onBindViewHolder(holder: ArtPieceViewHolder, position: Int) {
-        holder.bind(artPieces[position], onItemClick)
+    fun updateList(newList: List<ArtPiece>) {
+        artPieces = newList
+        notifyDataSetChanged()
     }
 
     class ArtPieceViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -33,7 +28,14 @@ class ArtPieceAdapter(
         fun bind(artPiece: ArtPiece, onItemClick: (ArtPiece) -> Unit) {
             titleTextView.text = artPiece.title
             descriptionTextView.text = artPiece.description
-            tagTextView.text = artPiece.tags.firstOrNull() ?: "No Tag"
+
+            // Display multiple tags if present
+            val tagsText = if (artPiece.tags.size > 1) {
+                artPiece.tags.joinToString(", ")
+            } else {
+                artPiece.tags.firstOrNull() ?: "No Tag"
+            }
+            tagTextView.text = tagsText
 
             // Force Picasso to reload the image
             Picasso.get().invalidate(File(artPiece.imageUrl))
@@ -43,6 +45,14 @@ class ArtPieceAdapter(
         }
     }
 
-    override fun getItemCount(): Int = artPieces.size
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ArtPieceViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.art_piece_item, parent, false)
+        return ArtPieceViewHolder(view)
+    }
 
+    override fun onBindViewHolder(holder: ArtPieceViewHolder, position: Int) {
+        holder.bind(artPieces[position], onItemClick)
+    }
+
+    override fun getItemCount(): Int = artPieces.size
 }

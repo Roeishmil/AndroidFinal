@@ -43,6 +43,7 @@ class ImageUploadManager(
     }
 
     private fun showAddDetailsDialog() {
+        val context = this.context
         val layout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 32, 32, 32)
@@ -51,26 +52,47 @@ class ImageUploadManager(
         val titleInput = EditText(context).apply { hint = "Enter title" }
         val descriptionInput = EditText(context).apply { hint = "Enter description" }
 
-        val tagSpinner = Spinner(context).apply {
-            adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, predefinedTags)
+        // Create a multiple tag selection UI
+        val tagLayout = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 8, 0, 8)
         }
 
-        val customTagInput = EditText(context).apply {
-            hint = "Enter custom tag (if selected)"
-            visibility = View.GONE
+        val tagLabel = TextView(context).apply {
+            text = "Select Tags (choose all that apply):"
+            setPadding(0, 8, 0, 8)
         }
 
-        tagSpinner.setOnItemSelectedListener(object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                customTagInput.visibility = if (predefinedTags[position] == "Custom") View.VISIBLE else View.GONE
+        tagLayout.addView(tagLabel)
+
+        val selectedTags = mutableListOf<String>()
+        val tagCheckboxes = mutableListOf<CheckBox>()
+
+        // Add predefined tag checkboxes
+        predefinedTags.forEach { tag ->
+            val checkbox = CheckBox(context).apply {
+                text = tag
+                setOnCheckedChangeListener { _, isChecked ->
+                    if (isChecked) {
+                        selectedTags.add(tag)
+                    } else {
+                        selectedTags.remove(tag)
+                    }
+                }
             }
+            tagCheckboxes.add(checkbox)
+            tagLayout.addView(checkbox)
+        }
 
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        })
+        // Add custom tag input
+        val customTagInput = EditText(context).apply {
+            hint = "Enter custom tag (optional)"
+            visibility = View.VISIBLE
+        }
 
         layout.addView(titleInput)
         layout.addView(descriptionInput)
-        layout.addView(tagSpinner)
+        layout.addView(tagLayout)
         layout.addView(customTagInput)
 
         AlertDialog.Builder(context)
@@ -79,23 +101,32 @@ class ImageUploadManager(
             .setPositiveButton("Save") { _, _ ->
                 val title = titleInput.text.toString().trim()
                 val description = descriptionInput.text.toString().trim()
-                val selectedTag = if (tagSpinner.selectedItem == "Custom") {
-                    customTagInput.text.toString().trim()
-                } else {
-                    tagSpinner.selectedItem.toString()
+
+                // Collect all selected tags
+                val finalTags = selectedTags.toMutableList()
+
+                // Add custom tag if provided
+                val customTag = customTagInput.text.toString().trim()
+                if (customTag.isNotEmpty()) {
+                    finalTags.add(customTag)
                 }
 
-                if (title.isEmpty() || description.isEmpty() || selectedTag.isEmpty()) {
-                    Toast.makeText(context, "All fields are required", Toast.LENGTH_SHORT).show()
+                // Remove "Custom" tag if it was selected but replace with actual custom tag
+                if (finalTags.contains("Custom") && customTag.isNotEmpty()) {
+                    finalTags.remove("Custom")
+                }
+
+                if (title.isEmpty() || description.isEmpty() || finalTags.isEmpty()) {
+                    Toast.makeText(context, "Title, description and at least one tag are required", Toast.LENGTH_SHORT).show()
                 } else {
-                    saveImageLocallyAndCreateArtPiece(title, description, selectedTag)
+                    saveImageLocallyAndCreateArtPiece(title, description, finalTags)
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    fun saveImageLocallyAndCreateArtPiece(title: String, description: String, tag: String) {
+    fun saveImageLocallyAndCreateArtPiece(title: String, description: String, tags: List<String>) {
         progressBar?.visibility = View.VISIBLE  // Show spinner immediately
 
         val imageUri = imageUri ?: return
@@ -116,7 +147,7 @@ class ImageUploadManager(
                 title = title,
                 description = description,
                 imageUrl = imageFile.absolutePath,
-                tags = listOf(tag),
+                tags = tags,
                 creatorId = auth.currentUser?.uid ?: "unknown",
                 timestamp = System.currentTimeMillis()
             )
@@ -134,13 +165,15 @@ class ImageUploadManager(
     }
 
     private fun toJson(artPiece: ArtPiece): String {
+        val tagsJson = artPiece.tags.joinToString(prefix = "[\"", postfix = "\"]", separator = "\", \"")
+
         return """
         {
             "artId": "${artPiece.artId}",
             "title": "${artPiece.title}",
             "description": "${artPiece.description}",
             "imageUrl": "${artPiece.imageUrl}",
-            "tags": ${artPiece.tags.joinToString(prefix = "[\"", postfix = "\"]", separator = "\", \"")},
+            "tags": $tagsJson,
             "creatorId": "${artPiece.creatorId}",
             "timestamp": ${artPiece.timestamp}
         }
