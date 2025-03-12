@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
@@ -13,14 +15,13 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
+import androidx.navigation.Navigation.findNavController
+import androidx.navigation.fragment.findNavController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.gson.Gson
 import com.rs.photoshare.models.User
 import java.io.File
 import java.io.FileOutputStream
-import android.os.Handler
-import android.os.Looper
 
 class UserProfileFragment : Fragment() {
 
@@ -40,7 +41,7 @@ class UserProfileFragment : Fragment() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == android.app.Activity.RESULT_OK) {
                 newProfileImageUri = result.data?.data
-                profileImageView.setImageURI(newProfileImageUri)  // Show new image immediately
+                profileImageView.setImageURI(newProfileImageUri)
             }
         }
 
@@ -50,7 +51,11 @@ class UserProfileFragment : Fragment() {
         firestore = FirebaseFirestore.getInstance()
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
         val view = inflater.inflate(R.layout.fragment_user_profile, container, false)
 
         profileImageView = view.findViewById(R.id.profileImageView)
@@ -59,9 +64,6 @@ class UserProfileFragment : Fragment() {
         changeProfileImageButton = view.findViewById(R.id.changeProfileImageButton)
         saveButton = view.findViewById(R.id.saveButton)
         cancelButton = view.findViewById(R.id.cancelButton)
-
-        // Hide unrelated buttons from MainActivity (including View Profile button)
-        (activity as? MainActivity)?.hideButtons()
 
         // Load user data
         auth.currentUser?.uid?.let { userId ->
@@ -76,7 +78,10 @@ class UserProfileFragment : Fragment() {
         editNameButton.setOnClickListener { showEditNameDialog() }
         changeProfileImageButton.setOnClickListener { openImagePicker() }
         saveButton.setOnClickListener { saveUserProfile() }
-        cancelButton.setOnClickListener { goBackToMain(immediate = true) }
+        cancelButton.setOnClickListener {
+            // Instead of popping the fragment manager manually:
+            findNavController().navigateUp()
+        }
 
         return view
     }
@@ -94,7 +99,7 @@ class UserProfileFragment : Fragment() {
             .setPositiveButton("Save") { _, _ ->
                 val newName = input.text.toString().trim()
                 if (newName.isNotEmpty()) {
-                    userNameTextView.text = newName  // Update UI immediately
+                    userNameTextView.text = newName
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -131,61 +136,26 @@ class UserProfileFragment : Fragment() {
             uploadedArtPiece = currentUser?.uploadedArtPiece ?: emptyList()
         )
 
-        // Update UI first to ensure immediate response
-        (activity as? MainActivity)?.updateUserHeader(newName)
-
-        // Show a saving toast
         Toast.makeText(context, "Saving profile...", Toast.LENGTH_SHORT).show()
 
-        // Then perform the Firestore update
         firestore.collection("users").document(userId).set(updatedUser)
             .addOnSuccessListener {
-                // Success message
+                // Success
                 Toast.makeText(requireContext(), "Profile updated successfully", Toast.LENGTH_SHORT).show()
 
-                // Force navigation back to main after a short delay
+                // Force navigation back after a small delay
                 Handler(Looper.getMainLooper()).postDelayed({
-                    goBackToMain(immediate = true)
-                }, 500) // Half-second delay to ensure the toast is seen
+                    findNavController().navigateUp()
+                }, 500)
             }
             .addOnFailureListener { e ->
-                // Show error but still go back
                 Toast.makeText(requireContext(), "Error updating profile: ${e.message}", Toast.LENGTH_LONG).show()
-                goBackToMain(immediate = true)
+                findNavController().navigateUp()
             }
-    }
-
-    private fun goBackToMain(immediate: Boolean = false) {
-        // Make sure we're attached to an activity
-        if (!isAdded()) return
-
-        try {
-            // Update the MainActivity's UI
-            val mainActivity = activity as? MainActivity
-            mainActivity?.showButtons()
-
-            if (immediate) {
-                // More direct approach for the Save button
-                // Clear the back stack completely and force show the main view
-                parentFragmentManager.popBackStackImmediate(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE)
-                mainActivity?.showRecyclerView()
-                mainActivity?.refreshArtPieces()
-            } else {
-                // Standard approach for the Cancel button
-                parentFragmentManager.popBackStack()
-                mainActivity?.showRecyclerView()
-                mainActivity?.refreshArtPieces()
-            }
-        } catch (e: Exception) {
-            // Last resort: recreate the activity
-            Toast.makeText(context, "Returning to main view", Toast.LENGTH_SHORT).show()
-            activity?.recreate()
-        }
     }
 
     private fun saveProfileImageLocally(uri: Uri, userId: String): String? {
         val imageFile = File(requireContext().filesDir, "profile_$userId.jpg")
-
         return try {
             requireContext().contentResolver.openInputStream(uri)?.use { inputStream ->
                 val bitmap = BitmapFactory.decodeStream(inputStream)
@@ -206,15 +176,5 @@ class UserProfileFragment : Fragment() {
                 profileImageView.setImageBitmap(BitmapFactory.decodeFile(imageFile.absolutePath))
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // Make sure buttons are shown again if fragment is destroyed
-        (activity as? MainActivity)?.showButtons()
-    }
-
-    companion object {
-        fun newInstance() = UserProfileFragment()
     }
 }

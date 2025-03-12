@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/homeFragment">
+
+    <fragment
+        android:id="@+id/homeFragment"
+        android:name="com.rs.photoshare.HomeFragment"
+        android:label="Home Fragment" />
+
+    <!-- UserProfileFragment destination -->
+    <fragment
+        android:id="@+id/userProfileFragment"
+        android:name="com.rs.photoshare.UserProfileFragment"
+        android:label="User Profile"
+        tools:layout="@layout/fragment_user_profile" />
+
+    <!-- MyArtFragment destination -->
+    <fragment
+        android:id="@+id/myArtFragment"
+        android:name="com.rs.photoshare.MyArtFragment"
+        android:label="My Art"
+        tools:layout="@layout/fragment_my_art" />
+
+    <!-- ArtPieceFragment destination with argument for the selected ArtPiece -->
+    <fragment
+        android:id="@+id/artPieceFragment"
+        android:name="com.rs.photoshare.ArtPieceFragment"
+        android:label="Art Piece"
+        tools:layout="@layout/fragment_art_piece">
+
+        <!-- If your ArtPiece is Parcelable, you can define an argument like this: -->
+        <argument
+            android:name="artPiece"
+            app:argType="com.rs.photoshare.models.ArtPiece" />
+    </fragment>
+
+</navigation>

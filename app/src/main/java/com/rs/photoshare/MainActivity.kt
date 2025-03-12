@@ -3,17 +3,12 @@ package com.rs.photoshare
 import ArtPieceAdapter
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.view.View
-import android.widget.Button
-import android.widget.CheckBox
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.children
+import androidx.navigation.NavOptions
+import androidx.navigation.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
@@ -24,6 +19,7 @@ import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
+    // Lateinit properties
     private lateinit var artPiecesRecyclerView: RecyclerView
     private lateinit var artPieceAdapter: ArtPieceAdapter
     private lateinit var imageUploadManager: ImageUploadManager
@@ -45,48 +41,26 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.main_activity)
 
+        // --- 1) Initialize all views first ---
         val userNameText: TextView = findViewById(R.id.userNameText)
         val logoutButton: Button = findViewById(R.id.logoutButton)
         val uploadArtButton: Button = findViewById(R.id.uploadArtButton)
         val clearPostsButton: Button = findViewById(R.id.clearPostsButton)
         val profileButton: Button = findViewById(R.id.profileButton)
+        val myArtButton: Button = findViewById(R.id.myArtButton)
 
         artPiecesRecyclerView = findViewById(R.id.artPiecesRecyclerView)
         artPiecesRecyclerView.layoutManager = LinearLayoutManager(this)
 
-        imageUploadManager = ImageUploadManager(
-            context = this,
-            firestore = firestore,
-            auth = auth,
-            progressBar = findViewById(R.id.progressBar),
-            onArtPieceUploaded = { artPiece ->
-                saveArtPieceToJson(artPiece)
-                localArtPieces.add(artPiece)
-                updateRecyclerView()
-                setupTagFilters() // Refresh tag filters when a new art piece is added
-            },
-        )
-
-        profileButton.setOnClickListener {
-            openUserProfileFragment()
-        }
-
-        // Initialize tag filtering components
+        // Tag filter UI
         filterContainer = findViewById(R.id.filterContainer)
         tagFilterLayout = findViewById(R.id.tagFilterLayout)
         applyFilterButton = findViewById(R.id.applyFilterButton)
         clearFilterButton = findViewById(R.id.clearFilterButton)
         toggleFiltersButton = findViewById(R.id.toggleFiltersButton)
 
-        // Set up toggle filters button
-        toggleFiltersButton.setOnClickListener {
-            toggleFiltersVisibility()
-        }
-
-        applyFilterButton.setOnClickListener {
-            filterArtPieces()
-        }
-
+        toggleFiltersButton.setOnClickListener { toggleFiltersVisibility() }
+        applyFilterButton.setOnClickListener { filterArtPieces() }
         clearFilterButton.setOnClickListener {
             // Clear all checkboxes
             tagFilterLayout.children.forEach { view ->
@@ -95,23 +69,36 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             selectedTags.clear()
-            updateRecyclerView() // Show all art pieces
+            updateRecyclerView() // Show all art
         }
 
-        uploadArtButton.setOnClickListener { imageUploadManager.startImagePicker(resultLauncher) }
-        clearPostsButton.setOnClickListener { clearAllLocalArtPieces() }
+        imageUploadManager = ImageUploadManager(
+            context = this,
+            firestore = firestore,
+            auth = auth,
+            progressBar = findViewById(R.id.progressBar),
+            onArtPieceUploaded = { artPiece ->
+                // Once an art piece is uploaded, save it locally:
+                saveArtPieceToJson(artPiece)
+                localArtPieces.add(artPiece)
+                updateRecyclerView()
+                setupTagFilters()
+            }
+        )
 
-        val myArtButton: Button = findViewById(R.id.myArtButton)
-        myArtButton.setOnClickListener {
-            openUserArtFragment()
-        }
+        // --- 2) Set up button listeners (profile, etc.) ---
+        profileButton.setOnClickListener { openUserProfileFragment() }
+        myArtButton.setOnClickListener { openUserArtFragment() }
 
         logoutButton.setOnClickListener {
             auth.signOut()
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
         }
+        uploadArtButton.setOnClickListener { imageUploadManager.startImagePicker(resultLauncher) }
+        clearPostsButton.setOnClickListener { clearAllLocalArtPieces() }
 
+        // --- 3) Load local art & set up user name ---
         loadArtPieces()
 
         auth.currentUser?.uid?.let { userId ->
@@ -120,7 +107,94 @@ class MainActivity : AppCompatActivity() {
                     userNameText.text = "Welcome, ${document.getString("name") ?: "User"}!"
                 }
         }
+
+        // --- 4) Attach NavController listener for auto-hide/show UI ---
+        val navController = findNavController(R.id.nav_host_fragment)
+        navController.addOnDestinationChangedListener { _, destination, _ ->
+            when (destination.id) {
+                // If your nav_graph's "main" is homeFragment:
+                R.id.homeFragment -> {
+                    showMainButtons()
+                    showRecyclerView()
+                }
+                else -> {
+                    hideMainButtons()
+                    hideRecyclerView()
+                }
+            }
+        }
     }
+
+    // ~~~~~~~~~~~~~~~ Navigation-related methods ~~~~~~~~~~~~~~~
+
+    private fun openUserProfileFragment() {
+        val navController = findNavController(R.id.nav_host_fragment)
+        // If already on userProfileFragment, do nothing
+        if (navController.currentDestination?.id == R.id.userProfileFragment) {
+            return
+        }
+        hideRecyclerView()
+        navController.navigate(R.id.userProfileFragment)
+    }
+
+    private fun openUserArtFragment() {
+        val navController = findNavController(R.id.nav_host_fragment)
+        // If already on myArtFragment, do nothing
+        if (navController.currentDestination?.id == R.id.myArtFragment) {
+            return
+        }
+        hideRecyclerView()
+        navController.navigate(R.id.myArtFragment)
+    }
+
+    fun openArtPieceFragment(artPiece: ArtPiece) {
+        val navController = findNavController(R.id.nav_host_fragment)
+        // Optional: If you want to avoid opening the same fragment multiple times, check currentDest
+
+        // Hide the main screen
+        hideRecyclerView()
+
+        val bundle = Bundle().apply {
+            putParcelable("artPiece", artPiece)
+        }
+        navController.navigate(R.id.artPieceFragment, bundle)
+    }
+
+    // ~~~~~~~~~~~~~~~ Show/Hide Methods ~~~~~~~~~~~~~~~
+
+    fun showMainButtons() {
+        findViewById<Button>(R.id.uploadArtButton).visibility = View.VISIBLE
+        findViewById<Button>(R.id.clearPostsButton).visibility = View.VISIBLE
+        findViewById<Button>(R.id.myArtButton).visibility = View.VISIBLE
+        findViewById<Button>(R.id.toggleFiltersButton).visibility = View.VISIBLE
+    }
+
+    fun hideMainButtons() {
+        findViewById<Button>(R.id.uploadArtButton).visibility = View.GONE
+        findViewById<Button>(R.id.clearPostsButton).visibility = View.GONE
+        findViewById<Button>(R.id.myArtButton).visibility = View.GONE
+        findViewById<Button>(R.id.toggleFiltersButton).visibility = View.GONE
+    }
+
+    fun showRecyclerView() {
+        artPiecesRecyclerView.visibility = View.VISIBLE
+        findViewById<View>(R.id.nav_host_fragment).visibility = View.GONE
+    }
+
+    fun hideRecyclerView() {
+        artPiecesRecyclerView.visibility = View.GONE
+        findViewById<View>(R.id.nav_host_fragment).visibility = View.VISIBLE
+    }
+
+    // ~~~~~~~~~~~~~~~ Image Upload Result ~~~~~~~~~~~~~~~
+
+    private val resultLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        imageUploadManager.handleImageResult(result.resultCode, result.data)
+    }
+
+    // ~~~~~~~~~~~~~~~ Filtering + Loading Art Methods ~~~~~~~~~~~~~~~
 
     private fun toggleFiltersVisibility() {
         if (filterContainer.visibility == View.VISIBLE) {
@@ -132,35 +206,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun updateUserHeader(newName: String) {
-        val userNameTextView = findViewById<TextView>(R.id.userNameText)
-        userNameTextView.text = "Welcome, $newName!"
-    }
-
-    fun hideButtons() {
-        findViewById<Button>(R.id.uploadArtButton)?.visibility = View.GONE
-        findViewById<Button>(R.id.clearPostsButton)?.visibility = View.GONE
-        findViewById<Button>(R.id.logoutButton)?.visibility = View.GONE
-        findViewById<Button>(R.id.profileButton)?.visibility = View.GONE  // Hide Profile button
-    }
-
-    fun showButtons() {
-        findViewById<Button>(R.id.uploadArtButton)?.visibility = View.VISIBLE
-        findViewById<Button>(R.id.clearPostsButton)?.visibility = View.VISIBLE
-        findViewById<Button>(R.id.logoutButton)?.visibility = View.VISIBLE
-        findViewById<Button>(R.id.profileButton)?.visibility = View.VISIBLE  // Show Profile button
+    private fun filterArtPieces() {
+        if (selectedTags.isEmpty()) {
+            // Show all
+            updateRecyclerView()
+        } else {
+            val filteredList = localArtPieces.filter { piece ->
+                piece.tags.any { tag -> selectedTags.contains(tag) }
+            }
+            artPieceAdapter.updateList(filteredList)
+        }
     }
 
     private fun setupTagFilters() {
-        // Clear existing views
         tagFilterLayout.removeAllViews()
         selectedTags.clear()
 
-        // Get unique tags from all posts
         val uniqueTags = localArtPieces.flatMap { it.tags }.distinct().sorted()
-
         if (uniqueTags.isEmpty()) {
-            // Add a message if no tags exist
             val textView = TextView(this)
             textView.text = "No tags available"
             textView.setPadding(8, 8, 8, 8)
@@ -168,72 +231,27 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Add a checkbox for each unique tag
-        uniqueTags.forEach { tag ->
-            val checkBox = CheckBox(this)
-            checkBox.text = tag
-            checkBox.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) {
-                    selectedTags.add(tag)
-                } else {
-                    selectedTags.remove(tag)
+        for (tag in uniqueTags) {
+            val checkBox = CheckBox(this).apply {
+                text = tag
+                setOnCheckedChangeListener { _, isChecked ->
+                    if (isChecked) {
+                        selectedTags.add(tag)
+                    } else {
+                        selectedTags.remove(tag)
+                    }
                 }
             }
             tagFilterLayout.addView(checkBox)
         }
     }
 
-    private fun filterArtPieces() {
-        if (selectedTags.isEmpty()) {
-            updateRecyclerView() // Show all art pieces
-        } else {
-            // Filter art pieces that have ANY of the selected tags
-            val filteredList = localArtPieces.filter { artPiece ->
-                artPiece.tags.any { tag -> selectedTags.contains(tag) }
-            }
-            artPieceAdapter.updateList(filteredList)
-        }
-    }
-
-    private val resultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        imageUploadManager.handleImageResult(result.resultCode, result.data)
-    }
-
-    private fun updateRecyclerView() {
-        artPieceAdapter = ArtPieceAdapter(localArtPieces) { artPiece ->
-            openArtPieceFragment(artPiece)
-        }
-        artPiecesRecyclerView.adapter = artPieceAdapter
-    }
-
-    private fun openArtPieceFragment(artPiece: ArtPiece) {
-        findViewById<RecyclerView>(R.id.artPiecesRecyclerView).visibility = View.GONE
-        findViewById<FrameLayout>(R.id.fragmentContainer).apply {
-            visibility = View.VISIBLE
-            layoutParams.height = 0  // Expand to full height (ConstraintLayout will stretch it)
-            requestLayout()
-        }
-
-        val fragment = ArtPieceFragment.newInstance(artPiece)
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commit()
-    }
-
-    fun showRecyclerView() {
-        findViewById<RecyclerView>(R.id.artPiecesRecyclerView).visibility = View.VISIBLE
-        findViewById<FrameLayout>(R.id.fragmentContainer).visibility = View.GONE
-    }
-
     private fun loadArtPieces() {
         localArtPieces.clear()
-
         val files = filesDir.listFiles { file -> file.extension == "jpg" } ?: emptyArray()
 
         for (imageFile in files) {
             val metadataFile = File(imageFile.parent, imageFile.nameWithoutExtension + ".json")
-
             if (metadataFile.exists()) {
                 val artPiece = readArtPieceFromJson(metadataFile)
                 if (artPiece != null) {
@@ -241,16 +259,21 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-
         updateRecyclerView()
-        setupTagFilters() // Setup tag filters after loading art pieces
+        setupTagFilters()
+    }
+
+    private fun clearAllLocalArtPieces() {
+        filesDir.listFiles { file -> file.extension in setOf("jpg", "json") }?.forEach { it.delete() }
+        localArtPieces.clear()
+        updateRecyclerView()
+        setupTagFilters()
     }
 
     private fun readArtPieceFromJson(file: File): ArtPiece? {
         return try {
             gson.fromJson(file.readText(), ArtPiece::class.java)
         } catch (e: Exception) {
-            Log.e("MainActivity", "Failed to read JSON for ${file.name}: ${e.message}")
             null
         }
     }
@@ -260,44 +283,19 @@ class MainActivity : AppCompatActivity() {
         metadataFile.writeText(gson.toJson(artPiece))
     }
 
-    private fun clearAllLocalArtPieces() {
-        filesDir.listFiles { file -> file.extension in setOf("jpg", "json") }?.forEach { it.delete() }
-        localArtPieces.clear()
-        updateRecyclerView()
-        setupTagFilters() // Refresh tag filters after clearing all art pieces
+    private fun updateRecyclerView() {
+        artPieceAdapter = ArtPieceAdapter(localArtPieces) { artPiece ->
+            // On item click, open the detail fragment:
+            openArtPieceFragment(artPiece)
+        }
+        artPiecesRecyclerView.adapter = artPieceAdapter
     }
 
     fun refreshArtPieces(forceImageReload: Boolean = false) {
         loadArtPieces()
-        setupTagFilters() // Refresh tag filters when art pieces are refreshed
-
-        // Force Picasso to reload images by clearing the cache
+        setupTagFilters()
         if (forceImageReload) {
             artPieceAdapter.notifyDataSetChanged()
         }
     }
-
-    private fun openUserProfileFragment() {
-        findViewById<RecyclerView>(R.id.artPiecesRecyclerView).visibility = View.GONE
-        findViewById<FrameLayout>(R.id.fragmentContainer).visibility = View.VISIBLE
-
-        val fragment = UserProfileFragment.newInstance()
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commit()
-    }
-
-    private fun openUserArtFragment() {
-        findViewById<RecyclerView>(R.id.artPiecesRecyclerView).visibility = View.GONE
-        findViewById<FrameLayout>(R.id.fragmentContainer).visibility = View.VISIBLE
-
-        val fragment = MyArtFragment.newInstance()
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commit()
-    }
-
-    companion object
 }

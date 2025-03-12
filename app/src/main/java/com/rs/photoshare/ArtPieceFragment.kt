@@ -13,9 +13,10 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import com.google.gson.Gson
-import com.rs.photoshare.models.ArtPiece
 import com.rs.photoshare.managers.AuthManager
+import com.rs.photoshare.models.ArtPiece
 import java.io.File
 import java.io.FileOutputStream
 
@@ -35,7 +36,12 @@ class ArtPieceFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // If using Safe Args, you'd do:
+        // artPiece = ArtPieceFragmentArgs.fromBundle(requireArguments()).artPiece
+        // Otherwise, get the parcelable from the Bundle directly:
         artPiece = requireArguments().getParcelable("artPiece")!!
+
         authManager = AuthManager()
     }
 
@@ -48,6 +54,7 @@ class ArtPieceFragment : Fragment() {
         val imageView = view.findViewById<ImageView>(R.id.artPieceImageView)
         val editButton = view.findViewById<Button>(R.id.editButton)
         val deleteButton = view.findViewById<Button>(R.id.deleteButton)
+        val backButton = view.findViewById<Button>(R.id.backButton)
 
         titleTextView.text = artPiece.title
         descriptionTextView.text = artPiece.description
@@ -62,10 +69,8 @@ class ArtPieceFragment : Fragment() {
 
         editButton.setOnClickListener { showEditDialog() }
         deleteButton.setOnClickListener { showDeleteConfirmationDialog() }
-
-        view.findViewById<Button>(R.id.backButton).setOnClickListener {
-            parentFragmentManager.popBackStack()
-            (activity as? MainActivity)?.showRecyclerView()
+        backButton.setOnClickListener {
+            findNavController().navigateUp()
         }
 
         return view
@@ -101,7 +106,6 @@ class ArtPieceFragment : Fragment() {
             .setPositiveButton("Save") { _, _ ->
                 val newTitle = titleInput.text.toString().trim()
                 val newDescription = descriptionInput.text.toString().trim()
-
                 if (newTitle.isEmpty() || newDescription.isEmpty()) {
                     Toast.makeText(context, "Fields cannot be empty", Toast.LENGTH_SHORT).show()
                 } else {
@@ -129,7 +133,7 @@ class ArtPieceFragment : Fragment() {
                     newImagePath = savedPath
                 } else {
                     Toast.makeText(requireContext(), "Failed to save new image", Toast.LENGTH_SHORT).show()
-                    return  // Exit function if image saving failed
+                    return
                 }
             }
 
@@ -139,28 +143,22 @@ class ArtPieceFragment : Fragment() {
                 imageUrl = newImagePath
             )
 
-            // Write updated metadata BEFORE deleting the old image
             metadataFile.writeText(Gson().toJson(updatedArtPiece))
 
-            // Now delete the old image if it has changed
+            // If the old image is different, delete it
             if (newImageUri != null && artPiece.imageUrl != newImagePath) {
                 File(artPiece.imageUrl).delete()
             }
 
             Toast.makeText(requireContext(), "Post updated", Toast.LENGTH_SHORT).show()
 
-            // Notify MainActivity to refresh RecyclerView with updated image
             (activity as? MainActivity)?.refreshArtPieces(forceImageReload = true)
-
-            parentFragmentManager.popBackStack()
-            (activity as? MainActivity)?.showRecyclerView()
+            findNavController().navigateUp()
         }
     }
 
-
     private fun saveImageLocally(uri: Uri, artId: String): String? {
-        val imageFile = File(requireContext().filesDir, "art_${artId}.jpg")
-
+        val imageFile = File(requireContext().filesDir, "art_$artId.jpg")
         return try {
             requireContext().contentResolver.openInputStream(uri)?.use { inputStream ->
                 val bitmap = BitmapFactory.decodeStream(inputStream)
@@ -191,11 +189,8 @@ class ArtPieceFragment : Fragment() {
         metadataFile.delete()
 
         Toast.makeText(requireContext(), "Post deleted", Toast.LENGTH_SHORT).show()
-
         (activity as? MainActivity)?.refreshArtPieces()
-
-        parentFragmentManager.popBackStack()
-        (activity as? MainActivity)?.showRecyclerView()
+        findNavController().navigateUp()
     }
 
     companion object {

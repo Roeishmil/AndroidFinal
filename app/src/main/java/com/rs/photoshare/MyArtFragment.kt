@@ -7,6 +7,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import androidx.fragment.app.Fragment
+import androidx.navigation.Navigation.findNavController
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
@@ -28,15 +30,10 @@ class MyArtFragment : Fragment() {
         val backButton: Button = view.findViewById(R.id.backButton)
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
 
-        // Hide unrelated buttons
-        (activity as? MainActivity)?.hideButtons()
-
         loadUserArtPieces()
 
         backButton.setOnClickListener {
-            parentFragmentManager.popBackStack()
-            (activity as? MainActivity)?.showButtons()
-            (activity as? MainActivity)?.showRecyclerView()
+            findNavController().navigateUp()
         }
 
         return view
@@ -47,7 +44,6 @@ class MyArtFragment : Fragment() {
         userArtPieces.clear()
 
         val files = requireContext().filesDir.listFiles { file -> file.extension == "json" } ?: emptyArray()
-
         for (metadataFile in files) {
             val artPiece = readArtPieceFromJson(metadataFile)
             if (artPiece != null && artPiece.creatorId == currentUserId) {
@@ -56,7 +52,9 @@ class MyArtFragment : Fragment() {
         }
 
         artPieceAdapter = ArtPieceAdapter(userArtPieces) { artPiece ->
-            openArtPieceFragment(artPiece)
+            // We'll ask MainActivity to navigate to the ArtPieceFragment
+            // Or navigate directly using the NavController if you like:
+            (activity as? MainActivity)?.openArtPieceFragment(artPiece)
         }
         recyclerView.adapter = artPieceAdapter
     }
@@ -68,22 +66,5 @@ class MyArtFragment : Fragment() {
         } catch (e: Exception) {
             null
         }
-    }
-
-    private fun openArtPieceFragment(artPiece: ArtPiece) {
-        val fragment = ArtPieceFragment.newInstance(artPiece)
-        parentFragmentManager.beginTransaction()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commit()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        (activity as? MainActivity)?.showButtons()
-    }
-
-    companion object {
-        fun newInstance() = MyArtFragment()
     }
 }
