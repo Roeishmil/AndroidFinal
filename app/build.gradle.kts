@@ -83,4 +83,10 @@ dependencies {
     implementation (libs.picasso)
 
     implementation (libs.gson)
+
+    // Cloudinary
+    implementation(libs.cloudinary.android)
+    implementation(libs.cloudinary.core)
+
+
 }

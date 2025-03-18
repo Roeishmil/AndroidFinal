@@ -12,7 +12,6 @@ import android.view.View
 import android.widget.*
 import androidx.activity.result.ActivityResultLauncher
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import com.rs.photoshare.models.ArtPiece
 import java.io.File
 import java.io.FileOutputStream
@@ -20,14 +19,13 @@ import java.util.*
 
 class ImageUploadManager(
     private val context: Context,
-    private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth,
     private val progressBar: ProgressBar?,
     private val onArtPieceUploaded: (ArtPiece) -> Unit
 ) {
 
     private var imageUri: Uri? = null
-
+    private val cloudinaryManager = CloudinaryManager(context)
     private val predefinedTags = listOf("Warrior", "Wizard", "Doctor", "Engineer", "Custom")
 
     fun startImagePicker(launcher: ActivityResultLauncher<Intent>) {
@@ -119,64 +117,101 @@ class ImageUploadManager(
                 if (title.isEmpty() || description.isEmpty() || finalTags.isEmpty()) {
                     Toast.makeText(context, "Title, description and at least one tag are required", Toast.LENGTH_SHORT).show()
                 } else {
-                    saveImageLocallyAndCreateArtPiece(title, description, finalTags)
+                    uploadImageToCloudinary(title, description, finalTags)
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    fun saveImageLocallyAndCreateArtPiece(title: String, description: String, tags: List<String>) {
-        progressBar?.visibility = View.VISIBLE  // Show spinner immediately
+    private fun uploadImageToCloudinary(title: String, description: String, tags: List<String>) {
+        progressBar?.visibility = View.VISIBLE
 
         val imageUri = imageUri ?: return
         val artId = UUID.randomUUID().toString()
-        val imageFile = File(context.filesDir, "art_${artId}.jpg")
-        val metadataFile = File(context.filesDir, "art_${artId}.json")
 
-        try {
-            context.contentResolver.openInputStream(imageUri)?.use { inputStream ->
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                FileOutputStream(imageFile).use { outputStream ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-                }
+        cloudinaryManager.uploadImageFromUri(
+            uri = imageUri,
+            artId = artId,
+            onSuccess = { cloudinaryUrl ->
+                // Keep a local thumbnail for preview
+                val thumbnailFile = createLocalThumbnail(imageUri, artId)
+
+                val newArtPiece = ArtPiece(
+                    artId = artId,
+                    title = title,
+                    description = description,
+                    imageUrl = cloudinaryUrl,  // Store Cloudinary URL
+                    tags = tags,
+                    creatorId = auth.currentUser?.uid ?: "unknown",
+                    timestamp = System.currentTimeMillis()
+                )
+
+                // Save metadata locally with Cloudinary URL
+                saveArtPieceMetadata(newArtPiece, thumbnailFile?.absolutePath)
+                onArtPieceUploaded(newArtPiece)
+                progressBar?.visibility = View.GONE
+            },
+            onError = { errorMessage ->
+                Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
+                progressBar?.visibility = View.GONE
             }
+        )
+    }
 
-            val newArtPiece = ArtPiece(
-                artId = artId,
-                title = title,
-                description = description,
-                imageUrl = imageFile.absolutePath,
-                tags = tags,
-                creatorId = auth.currentUser?.uid ?: "unknown",
-                timestamp = System.currentTimeMillis()
-            )
+    private fun createLocalThumbnail(uri: Uri, artId: String): File? {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val originalBitmap = BitmapFactory.decodeStream(inputStream)
 
-            metadataFile.writeText(toJson(newArtPiece))
+                // Create a smaller thumbnail version
+                val maxDimension = 300
+                val thumbnailWidth: Int
+                val thumbnailHeight: Int
 
-            // Simulate success callback
-            onArtPieceUploaded(newArtPiece)
+                if (originalBitmap.width > originalBitmap.height) {
+                    thumbnailWidth = maxDimension
+                    thumbnailHeight = (maxDimension.toFloat() / originalBitmap.width * originalBitmap.height).toInt()
+                } else {
+                    thumbnailHeight = maxDimension
+                    thumbnailWidth = (maxDimension.toFloat() / originalBitmap.height * originalBitmap.width).toInt()
+                }
 
+                val thumbnailBitmap = Bitmap.createScaledBitmap(originalBitmap, thumbnailWidth, thumbnailHeight, true)
+                val thumbnailFile = File(context.filesDir, "thumb_${artId}.jpg")
+
+                FileOutputStream(thumbnailFile).use { outputStream ->
+                    thumbnailBitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+                }
+
+                thumbnailFile
+            }
         } catch (e: Exception) {
-            Toast.makeText(context, "Failed to save image: ${e.message}", Toast.LENGTH_SHORT).show()
-        } finally {
-            progressBar?.visibility = View.GONE  // Always hide spinner when done
+            Toast.makeText(context, "Failed to create thumbnail: ${e.message}", Toast.LENGTH_SHORT).show()
+            null
         }
     }
 
-    private fun toJson(artPiece: ArtPiece): String {
+    private fun saveArtPieceMetadata(artPiece: ArtPiece, thumbnailPath: String?) {
+        val metadataFile = File(context.filesDir, "art_${artPiece.artId}.json")
+
+        // This is a simple JSON string creation
+        // You might want to use Gson or another JSON library in production
         val tagsJson = artPiece.tags.joinToString(prefix = "[\"", postfix = "\"]", separator = "\", \"")
 
-        return """
+        val artPieceJson = """
         {
             "artId": "${artPiece.artId}",
             "title": "${artPiece.title}",
             "description": "${artPiece.description}",
             "imageUrl": "${artPiece.imageUrl}",
+            "thumbnailPath": "${thumbnailPath ?: ""}",
             "tags": $tagsJson,
             "creatorId": "${artPiece.creatorId}",
             "timestamp": ${artPiece.timestamp}
         }
         """.trimIndent()
+
+        metadataFile.writeText(artPieceJson)
     }
 }

@@ -17,6 +17,7 @@ import androidx.navigation.fragment.findNavController
 import com.google.gson.Gson
 import com.rs.photoshare.managers.AuthManager
 import com.rs.photoshare.models.ArtPiece
+import com.squareup.picasso.Picasso
 import java.io.File
 import java.io.FileOutputStream
 
@@ -59,7 +60,15 @@ class ArtPieceFragment : Fragment() {
         titleTextView.text = artPiece.title
         descriptionTextView.text = artPiece.description
         tagTextView.text = artPiece.tags.firstOrNull() ?: "No Tag"
-        imageView.setImageBitmap(BitmapFactory.decodeFile(artPiece.imageUrl))
+        // Load image differently based on source
+        if (artPiece.imageUrl.startsWith("http")) {
+            // Cloudinary URL
+            Picasso.get().load(artPiece.imageUrl).into(imageView)
+        } else {
+            // Local file
+            imageView.setImageBitmap(BitmapFactory.decodeFile(artPiece.imageUrl))
+        }
+        //imageView.setImageBitmap(BitmapFactory.decodeFile(artPiece.imageUrl))
 
         val currentUserId = authManager.getCurrentUserId()
         if (artPiece.creatorId != currentUserId) {

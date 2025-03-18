@@ -40,7 +40,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.main_activity)
-
+        // Initialize Cloudinary
+        CloudinaryManager.initialize(this)
         // --- 1) Initialize all views first ---
         val userNameText: TextView = findViewById(R.id.userNameText)
         val logoutButton: Button = findViewById(R.id.logoutButton)
@@ -74,7 +75,6 @@ class MainActivity : AppCompatActivity() {
 
         imageUploadManager = ImageUploadManager(
             context = this,
-            firestore = firestore,
             auth = auth,
             progressBar = findViewById(R.id.progressBar),
             onArtPieceUploaded = { artPiece ->
@@ -248,15 +248,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadArtPieces() {
         localArtPieces.clear()
-        val files = filesDir.listFiles { file -> file.extension == "jpg" } ?: emptyArray()
+        // Look for JSON files instead of JPG files
+        val files = filesDir.listFiles { file -> file.extension == "json" && file.name.startsWith("art_") } ?: emptyArray()
 
-        for (imageFile in files) {
-            val metadataFile = File(imageFile.parent, imageFile.nameWithoutExtension + ".json")
-            if (metadataFile.exists()) {
-                val artPiece = readArtPieceFromJson(metadataFile)
-                if (artPiece != null) {
-                    localArtPieces.add(artPiece)
-                }
+        for (metadataFile in files) {
+            val artPiece = readArtPieceFromJson(metadataFile)
+            if (artPiece != null) {
+                localArtPieces.add(artPiece)
             }
         }
         updateRecyclerView()

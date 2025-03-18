@@ -37,9 +37,14 @@ class ArtPieceAdapter(
             }
             tagTextView.text = tagsText
 
-            // Force Picasso to reload the image
-            Picasso.get().invalidate(File(artPiece.imageUrl))
-            Picasso.get().load(File(artPiece.imageUrl)).into(imageView)
+            // Load image from Cloudinary URL or local file
+            if (artPiece.imageUrl.startsWith("http")) {
+                // It's a Cloudinary URL
+                Picasso.get().load(artPiece.imageUrl).into(imageView)
+            } else {
+                // It's a local file path from the old system
+                Picasso.get().load(File(artPiece.imageUrl)).into(imageView)
+            }
 
             itemView.setOnClickListener { onItemClick(artPiece) }
         }
