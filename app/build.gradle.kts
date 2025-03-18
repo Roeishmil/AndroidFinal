@@ -87,6 +87,9 @@ dependencies {
     // Cloudinary
     implementation(libs.cloudinary.android)
     implementation(libs.cloudinary.core)
-
-
+// Retrofit
+    implementation(libs.retrofit)
+    implementation(libs.converter.gson)
+    implementation(libs.okhttp)
+    implementation(libs.logging.interceptor)
 }

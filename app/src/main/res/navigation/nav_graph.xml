@@ -37,4 +37,10 @@
             app:argType="com.rs.photoshare.models.ArtPiece" />
     </fragment>
 
+<!--    <fragment-->
+<!--        android:id="@+id/externalPhotosFragment"-->
+<!--        android:name="com.rs.photoshare.ExternalPhotosFragment"-->
+<!--        android:label="External Photos"-->
+<!--        tools:layout="@layout/fragment_external_photos" />-->
+
 </navigation>

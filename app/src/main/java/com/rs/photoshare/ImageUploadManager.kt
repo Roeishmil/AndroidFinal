@@ -11,10 +11,22 @@ import android.provider.MediaStore
 import android.view.View
 import android.widget.*
 import androidx.activity.result.ActivityResultLauncher
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
+import com.rs.photoshare.api.PhotoApiService
 import com.rs.photoshare.models.ArtPiece
+import com.rs.photoshare.models.Photo
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.*
 
 class ImageUploadManager(
@@ -28,9 +40,121 @@ class ImageUploadManager(
     private val cloudinaryManager = CloudinaryManager(context)
     private val predefinedTags = listOf("Warrior", "Wizard", "Doctor", "Engineer", "Custom")
 
+    // Retrofit instance for the PhotoApiService
+    private val retrofit = Retrofit.Builder()
+        .baseUrl("https://picsum.photos/")
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    private val photoApiService = retrofit.create(PhotoApiService::class.java)
+
+    // Method to show image source selection dialog
+    fun showImageSourceSelectionDialog(launcher: ActivityResultLauncher<Intent>) {
+        val options = arrayOf("Device Gallery", "Online Photos")
+
+        AlertDialog.Builder(context)
+            .setTitle("Select Image Source")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> startImagePicker(launcher)
+                    1 -> showOnlinePhotoSelectionDialog(launcher)
+                }
+            }
+            .show()
+    }
+
+    // Original method to pick from device gallery
     fun startImagePicker(launcher: ActivityResultLauncher<Intent>) {
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         launcher.launch(intent)
+    }
+
+    // New method to display and select online photos
+    private fun showOnlinePhotoSelectionDialog(launcher: ActivityResultLauncher<Intent>) {
+        val dialogView = View.inflate(context, R.layout.dialog_online_photos, null)
+        val recyclerView = dialogView.findViewById<RecyclerView>(R.id.onlinePhotosRecyclerView)
+        val loadingProgressBar = dialogView.findViewById<ProgressBar>(R.id.loadingProgressBar)
+
+        recyclerView.layoutManager = GridLayoutManager(context, 2)
+
+        val dialog = AlertDialog.Builder(context)
+            .setTitle("Select an Online Photo")
+            .setView(dialogView)
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        loadingProgressBar.visibility = View.VISIBLE
+
+        // Fetch photos from API
+        photoApiService.getPhotos(page = 1, limit = 20).enqueue(object : Callback<List<Photo>> {
+            override fun onResponse(call: Call<List<Photo>>, response: Response<List<Photo>>) {
+                loadingProgressBar.visibility = View.GONE
+
+                if (response.isSuccessful) {
+                    val photos = response.body() ?: emptyList()
+
+                    val adapter = OnlinePhotoAdapter(photos) { selectedPhoto ->
+                        dialog.dismiss()
+
+                        progressBar?.visibility = View.VISIBLE
+                        Thread {
+                            try {
+                                // Download the image to a temporary file
+                                val tempFile = downloadImageToTempFile(selectedPhoto.download_url)
+
+                                // Convert to URI
+                                val contentUri = Uri.fromFile(tempFile)
+
+                                // Update UI on main thread
+                                (context as? Activity)?.runOnUiThread {
+                                    progressBar?.visibility = View.GONE
+                                    imageUri = contentUri
+                                    showAddDetailsDialog()
+                                }
+                            } catch (e: Exception) {
+                                (context as? Activity)?.runOnUiThread {
+                                    progressBar?.visibility = View.GONE
+                                    Toast.makeText(context, "Failed to download image: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }.start()
+                    }
+
+                    recyclerView.adapter = adapter
+                } else {
+                    Toast.makeText(context, "Failed to load photos: ${response.message()}", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onFailure(call: Call<List<Photo>>, t: Throwable) {
+                loadingProgressBar.visibility = View.GONE
+                Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+            }
+        })
+
+        dialog.show()
+    }
+
+    // Download image from URL to a temporary file
+    private fun downloadImageToTempFile(imageUrl: String): File {
+        val url = URL(imageUrl)
+        val connection = url.openConnection() as HttpURLConnection
+        connection.doInput = true
+        connection.connect()
+
+        val input: InputStream = connection.inputStream
+        val tempFile = File.createTempFile("retrofit_image", ".jpg", context.cacheDir)
+
+        FileOutputStream(tempFile).use { output ->
+            val buffer = ByteArray(4 * 1024) // 4k buffer
+            var bytesRead: Int
+            while (input.read(buffer).also { bytesRead = it } != -1) {
+                output.write(buffer, 0, bytesRead)
+            }
+            output.flush()
+        }
+
+        return tempFile
     }
 
     fun handleImageResult(resultCode: Int, data: Intent?) {

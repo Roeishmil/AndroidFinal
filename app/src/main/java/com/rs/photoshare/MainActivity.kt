@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.main_activity)
         // Initialize Cloudinary
         CloudinaryManager.initialize(this)
+
         // --- 1) Initialize all views first ---
         val userNameText: TextView = findViewById(R.id.userNameText)
         val logoutButton: Button = findViewById(R.id.logoutButton)
@@ -95,7 +96,12 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
         }
-        uploadArtButton.setOnClickListener { imageUploadManager.startImagePicker(resultLauncher) }
+
+        // Modified to show the image source selection dialog
+        uploadArtButton.setOnClickListener {
+            imageUploadManager.showImageSourceSelectionDialog(resultLauncher)
+        }
+
         clearPostsButton.setOnClickListener { clearAllLocalArtPieces() }
 
         // --- 3) Load local art & set up user name ---

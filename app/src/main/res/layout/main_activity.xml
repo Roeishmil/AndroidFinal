@@ -50,6 +50,13 @@
         app:layout_constraintTop_toTopOf="@+id/logoutButton"
         app:layout_constraintBottom_toBottomOf="@+id/logoutButton" />
 
+<!--    <Button-->
+<!--        android:id="@+id/browseExternalButton"-->
+<!--        android:layout_width="wrap_content"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        android:text="Browse External Photos"-->
+<!--        tools:ignore="MissingConstraints" />-->
+
     <!-- Toggle button for filters -->
     <Button
         android:id="@+id/toggleFiltersButton"
