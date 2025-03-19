@@ -2,7 +2,6 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="16dp">
@@ -61,14 +60,65 @@
         app:layout_constraintTop_toBottomOf="@id/artPieceDescriptionView"
         app:layout_constraintStart_toStartOf="@id/artPieceDescriptionView"/>
 
+    <!-- Rating Layout -->
+    <LinearLayout
+        android:id="@+id/ratingLayout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="12dp"
+        app:layout_constraintTop_toBottomOf="@id/artPieceTagView"
+        app:layout_constraintStart_toStartOf="@id/artPieceTagView">
+
+        <!-- Like Button -->
+        <ImageButton
+            android:id="@+id/likeButtonDetail"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_add"
+            android:contentDescription="Like" />
+
+        <!-- Like Count -->
+        <TextView
+            android:id="@+id/likeCountDetail"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0"
+            android:textSize="16sp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="16dp"
+            android:layout_gravity="center_vertical" />
+
+        <!-- Dislike Button -->
+        <ImageButton
+            android:id="@+id/dislikeButtonDetail"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_delete"
+            android:contentDescription="Dislike" />
+
+        <!-- Dislike Count -->
+        <TextView
+            android:id="@+id/dislikeCountDetail"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0"
+            android:textSize="16sp"
+            android:layout_marginStart="8dp"
+            android:layout_gravity="center_vertical" />
+
+    </LinearLayout>
+
     <!-- Edit + Delete row -->
     <LinearLayout
         android:id="@+id/buttonRow"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        app:layout_constraintTop_toBottomOf="@id/artPieceTagView"
-        app:layout_constraintStart_toStartOf="@id/artPieceTagView"
+        app:layout_constraintTop_toBottomOf="@id/ratingLayout"
+        app:layout_constraintStart_toStartOf="@id/ratingLayout"
         android:layout_marginTop="16dp">
 
         <Button

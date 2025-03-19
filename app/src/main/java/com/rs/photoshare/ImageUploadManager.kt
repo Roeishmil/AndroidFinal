@@ -268,7 +268,11 @@ class ImageUploadManager(
                     imageUrl = cloudinaryUrl,  // Store Cloudinary URL
                     tags = tags,
                     creatorId = auth.currentUser?.uid ?: "unknown",
-                    timestamp = System.currentTimeMillis()
+                    timestamp = System.currentTimeMillis(),
+                    likes = 0,
+                    dislikes = 0,
+                    likedBy = listOf(),
+                    dislikedBy = listOf()
                 )
 
                 // Save metadata locally with Cloudinary URL

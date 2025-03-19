@@ -82,6 +82,7 @@ class ArtPieceFragment : Fragment() {
             findNavController().navigateUp()
         }
 
+        setupRatingButtons()
         return view
     }
 
@@ -201,6 +202,121 @@ class ArtPieceFragment : Fragment() {
         (activity as? MainActivity)?.refreshArtPieces()
         findNavController().navigateUp()
     }
+    private fun setupRatingButtons() {
+        val likeButton = view?.findViewById<ImageButton>(R.id.likeButtonDetail)
+        val dislikeButton = view?.findViewById<ImageButton>(R.id.dislikeButtonDetail)
+        val likeCount = view?.findViewById<TextView>(R.id.likeCountDetail)
+        val dislikeCount = view?.findViewById<TextView>(R.id.dislikeCountDetail)
+
+        // Set initial values
+        likeCount?.text = artPiece.likes.toString()
+        dislikeCount?.text = artPiece.dislikes.toString()
+
+        val currentUserId = authManager.getCurrentUserId()
+
+        // Visual indication of user's rating
+        if (artPiece.likedBy.contains(currentUserId)) {
+            likeButton?.setImageResource(android.R.drawable.ic_menu_add) // Replace with thumbs up filled
+        } else if (artPiece.dislikedBy.contains(currentUserId)) {
+            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete) // Replace with thumbs down filled
+        }
+
+        // Handle like button
+        likeButton?.setOnClickListener {
+            updateRating(true)
+        }
+
+        // Handle dislike button
+        dislikeButton?.setOnClickListener {
+            updateRating(false)
+        }
+    }
+
+    private fun updateRating(isLike: Boolean) {
+        val currentUserId = authManager.getCurrentUserId()
+        val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
+
+        if (!metadataFile.exists()) {
+            Toast.makeText(requireContext(), "Cannot update rating for this post", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val likedBy = artPiece.likedBy.toMutableList()
+        val dislikedBy = artPiece.dislikedBy.toMutableList()
+
+        var likes = artPiece.likes
+        var dislikes = artPiece.dislikes
+
+        // Update liked/disliked lists and counts
+        if (isLike) {
+            if (likedBy.contains(currentUserId)) {
+                // Already liked, remove like
+                likedBy.remove(currentUserId)
+                likes--
+            } else {
+                // Add like and remove dislike if present
+                likedBy.add(currentUserId.toString())
+                likes++
+
+                if (dislikedBy.contains(currentUserId)) {
+                    dislikedBy.remove(currentUserId)
+                    dislikes--
+                }
+            }
+        } else {
+            if (dislikedBy.contains(currentUserId)) {
+                // Already disliked, remove dislike
+                dislikedBy.remove(currentUserId)
+                dislikes--
+            } else {
+                // Add dislike and remove like if present
+                dislikedBy.add(currentUserId.toString())
+                dislikes++
+
+                if (likedBy.contains(currentUserId)) {
+                    likedBy.remove(currentUserId)
+                    likes--
+                }
+            }
+        }
+
+        // Create updated art piece
+        val updatedArtPiece = artPiece.copy(
+            likes = likes,
+            dislikes = dislikes,
+            likedBy = likedBy,
+            dislikedBy = dislikedBy
+        )
+
+        // Save updated art piece
+        metadataFile.writeText(Gson().toJson(updatedArtPiece))
+
+        // Update UI
+        view?.findViewById<TextView>(R.id.likeCountDetail)?.text = likes.toString()
+        view?.findViewById<TextView>(R.id.dislikeCountDetail)?.text = dislikes.toString()
+
+        // Update visual indication
+        val likeButton = view?.findViewById<ImageButton>(R.id.likeButtonDetail)
+        val dislikeButton = view?.findViewById<ImageButton>(R.id.dislikeButtonDetail)
+
+        if (likedBy.contains(currentUserId)) {
+            likeButton?.setImageResource(android.R.drawable.ic_menu_add) // Replace with thumbs up filled
+            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete) // Default dislike icon
+        } else if (dislikedBy.contains(currentUserId)) {
+            likeButton?.setImageResource(android.R.drawable.ic_menu_add) // Default like icon
+            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete) // Replace with thumbs down filled
+        } else {
+            likeButton?.setImageResource(android.R.drawable.ic_menu_add) // Default like icon
+            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete) // Default dislike icon
+        }
+
+        // Update artPiece reference
+        artPiece = updatedArtPiece
+
+        // Refresh main activity
+        (activity as? MainActivity)?.refreshArtPieces()
+    }
+
 
     companion object {
         fun newInstance(artPiece: ArtPiece) = ArtPieceFragment().apply {

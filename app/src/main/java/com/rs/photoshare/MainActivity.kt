@@ -214,13 +214,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun filterArtPieces() {
         if (selectedTags.isEmpty()) {
-            // Show all
-            updateRecyclerView()
+            // Show all, sorted by rating
+            artPieceAdapter.updateList(sortArtPiecesByRating(localArtPieces))
         } else {
             val filteredList = localArtPieces.filter { piece ->
                 piece.tags.any { tag -> selectedTags.contains(tag) }
             }
-            artPieceAdapter.updateList(filteredList)
+            artPieceAdapter.updateList(sortArtPiecesByRating(filteredList))
         }
     }
 
@@ -287,12 +287,92 @@ class MainActivity : AppCompatActivity() {
         metadataFile.writeText(gson.toJson(artPiece))
     }
 
-    private fun updateRecyclerView() {
-        artPieceAdapter = ArtPieceAdapter(localArtPieces) { artPiece ->
-            // On item click, open the detail fragment:
-            openArtPieceFragment(artPiece)
-        }
+    private fun setupArtPieceAdapter() {
+        artPieceAdapter = ArtPieceAdapter(
+            sortArtPiecesByRating(localArtPieces),
+            onItemClick = { artPiece -> openArtPieceFragment(artPiece) },
+            onLikeClick = { artPiece -> updateArtPieceRating(artPiece, true) },
+            onDislikeClick = { artPiece -> updateArtPieceRating(artPiece, false) }
+        )
         artPiecesRecyclerView.adapter = artPieceAdapter
+    }
+
+     fun updateArtPieceRating(artPiece: ArtPiece, isLike: Boolean) {
+        val currentUserId = auth.currentUser?.uid ?: return
+        val metadataFile = File(filesDir, "art_${artPiece.artId}.json")
+
+        if (!metadataFile.exists()) {
+            Toast.makeText(this, "Cannot update rating for this post", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val likedBy = artPiece.likedBy.toMutableList()
+        val dislikedBy = artPiece.dislikedBy.toMutableList()
+
+        var likes = artPiece.likes
+        var dislikes = artPiece.dislikes
+
+        // Update liked/disliked lists and counts
+        if (isLike) {
+            if (likedBy.contains(currentUserId)) {
+                // Already liked, remove like
+                likedBy.remove(currentUserId)
+                likes--
+            } else {
+                // Add like and remove dislike if present
+                likedBy.add(currentUserId)
+                likes++
+
+                if (dislikedBy.contains(currentUserId)) {
+                    dislikedBy.remove(currentUserId)
+                    dislikes--
+                }
+            }
+        } else {
+            if (dislikedBy.contains(currentUserId)) {
+                // Already disliked, remove dislike
+                dislikedBy.remove(currentUserId)
+                dislikes--
+            } else {
+                // Add dislike and remove like if present
+                dislikedBy.add(currentUserId)
+                dislikes++
+
+                if (likedBy.contains(currentUserId)) {
+                    likedBy.remove(currentUserId)
+                    likes--
+                }
+            }
+        }
+
+        // Create updated art piece
+        val updatedArtPiece = artPiece.copy(
+            likes = likes,
+            dislikes = dislikes,
+            likedBy = likedBy,
+            dislikedBy = dislikedBy
+        )
+
+        // Save updated art piece
+        metadataFile.writeText(gson.toJson(updatedArtPiece))
+
+        // Update local list
+        val index = localArtPieces.indexOfFirst { it.artId == artPiece.artId }
+        if (index != -1) {
+            localArtPieces[index] = updatedArtPiece
+        }
+
+        // Refresh the sorted list
+        artPieceAdapter.updateList(sortArtPiecesByRating(localArtPieces))
+    }
+
+    // Sort art pieces by rating (likes - dislikes)
+    private fun sortArtPiecesByRating(pieces: List<ArtPiece>): List<ArtPiece> {
+        return pieces.sortedByDescending { it.getRatingScore() }
+    }
+
+    private fun updateRecyclerView() {
+        setupArtPieceAdapter()
     }
 
     fun refreshArtPieces(forceImageReload: Boolean = false) {

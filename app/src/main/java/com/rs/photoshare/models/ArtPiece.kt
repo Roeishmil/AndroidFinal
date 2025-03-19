@@ -11,7 +11,11 @@ data class ArtPiece(
     val thumbnailPath: String? = null,
     val tags: List<String> = emptyList(),
     val creatorId: String = "",
-    val timestamp: Long = 0L
+    val timestamp: Long = 0L,
+    val likes: Int = 0,
+    val dislikes: Int = 0,
+    val likedBy: List<String> = emptyList(),
+    val dislikedBy: List<String> = emptyList()
 ) : Parcelable {
     constructor(parcel: Parcel) : this(
         artId = parcel.readString() ?: "",
@@ -21,7 +25,11 @@ data class ArtPiece(
         thumbnailPath = parcel.readString(),
         tags = parcel.createStringArrayList() ?: emptyList(),
         creatorId = parcel.readString() ?: "",
-        timestamp = parcel.readLong()
+        timestamp = parcel.readLong(),
+        likes = parcel.readInt(),
+        dislikes = parcel.readInt(),
+        likedBy = parcel.createStringArrayList() ?: emptyList(),
+        dislikedBy = parcel.createStringArrayList() ?: emptyList()
     )
 
     override fun writeToParcel(parcel: Parcel, flags: Int) {
@@ -33,6 +41,10 @@ data class ArtPiece(
         parcel.writeStringList(tags)
         parcel.writeString(creatorId)
         parcel.writeLong(timestamp)
+        parcel.writeInt(likes)
+        parcel.writeInt(dislikes)
+        parcel.writeStringList(likedBy)
+        parcel.writeStringList(dislikedBy)
     }
 
     override fun describeContents(): Int = 0
@@ -45,5 +57,10 @@ data class ArtPiece(
         override fun newArray(size: Int): Array<ArtPiece?> {
             return arrayOfNulls(size)
         }
+    }
+
+    // Helper function to get the rating score (likes - dislikes)
+    fun getRatingScore(): Int {
+        return likes - dislikes
     }
 }

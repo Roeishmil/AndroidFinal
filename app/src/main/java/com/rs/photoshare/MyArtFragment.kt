@@ -51,11 +51,21 @@ class MyArtFragment : Fragment() {
             }
         }
 
-        artPieceAdapter = ArtPieceAdapter(userArtPieces) { artPiece ->
-            // We'll ask MainActivity to navigate to the ArtPieceFragment
-            // Or navigate directly using the NavController if you like:
-            (activity as? MainActivity)?.openArtPieceFragment(artPiece)
-        }
+        artPieceAdapter = ArtPieceAdapter(
+            userArtPieces,
+            onItemClick = { artPiece ->
+                // Navigate to the art piece fragment
+                (activity as? MainActivity)?.openArtPieceFragment(artPiece)
+            },
+            onLikeClick = { artPiece ->
+                // Handle like click
+                (activity as? MainActivity)?.updateArtPieceRating(artPiece, true)
+            },
+            onDislikeClick = { artPiece ->
+                // Handle dislike click
+                (activity as? MainActivity)?.updateArtPieceRating(artPiece, false)
+            }
+        )
         recyclerView.adapter = artPieceAdapter
     }
 
