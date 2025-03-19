@@ -15,13 +15,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.google.gson.Gson
+import com.rs.photoshare.fragments.TagSuggestionFragment
 import com.rs.photoshare.managers.AuthManager
 import com.rs.photoshare.models.ArtPiece
 import com.squareup.picasso.Picasso
 import java.io.File
 import java.io.FileOutputStream
 
-class ArtPieceFragment : Fragment() {
+class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback {
 
     private lateinit var artPiece: ArtPiece
     private lateinit var authManager: AuthManager
@@ -35,12 +36,10 @@ class ArtPieceFragment : Fragment() {
             }
         }
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // If using Safe Args, you'd do:
-        // artPiece = ArtPieceFragmentArgs.fromBundle(requireArguments()).artPiece
-        // Otherwise, get the parcelable from the Bundle directly:
         artPiece = requireArguments().getParcelable("artPiece")!!
 
         authManager = AuthManager()
@@ -86,6 +85,29 @@ class ArtPieceFragment : Fragment() {
         return view
     }
 
+    override fun onTagsSelected(tags: List<String>) {
+        if (tags.isNotEmpty()) {
+            // Update the art piece with the new tags
+            val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
+            if (metadataFile.exists()) {
+                val updatedArtPiece = artPiece.copy(tags = tags)
+                metadataFile.writeText(Gson().toJson(updatedArtPiece))
+
+                // Update the UI
+                view?.findViewById<TextView>(R.id.artPieceTagView)?.text =
+                    if (tags.size > 1) tags.joinToString(", ") else tags.firstOrNull() ?: "No Tag"
+
+                // Update the artPiece reference
+                artPiece = updatedArtPiece
+
+                // Refresh main activity
+                (activity as? MainActivity)?.refreshArtPieces()
+
+                Toast.makeText(requireContext(), "Tags updated", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun showEditDialog() {
         val context = requireContext()
         val layout = LinearLayout(context).apply {
@@ -106,9 +128,16 @@ class ArtPieceFragment : Fragment() {
             setOnClickListener { openImagePicker() }
         }
 
+        // Add tag suggestion button
+        val suggestTagsButton = Button(context).apply {
+            text = "Suggest Tags"
+            setOnClickListener { openTagSuggestions() }
+        }
+
         layout.addView(titleInput)
         layout.addView(descriptionInput)
         layout.addView(changeImageButton)
+        layout.addView(suggestTagsButton)
 
         AlertDialog.Builder(context)
             .setTitle("Edit Post")
@@ -129,6 +158,15 @@ class ArtPieceFragment : Fragment() {
     private fun openImagePicker() {
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         imagePickerLauncher.launch(intent)
+    }
+
+    private fun openTagSuggestions() {
+        // Navigate to the tag suggestion fragment
+        val tagSuggestionFragment = TagSuggestionFragment.newInstance(artPiece.tags.toString())
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragment_container, tagSuggestionFragment)
+            .addToBackStack(null)
+            .commit()
     }
 
     private fun updatePost(newTitle: String, newDescription: String) {

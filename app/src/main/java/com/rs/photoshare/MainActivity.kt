@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.children
 import androidx.navigation.NavOptions
@@ -17,7 +18,7 @@ import com.google.gson.Gson
 import com.rs.photoshare.models.ArtPiece
 import java.io.File
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(){
 
     // Lateinit properties
     private lateinit var artPiecesRecyclerView: RecyclerView
@@ -84,7 +85,8 @@ class MainActivity : AppCompatActivity() {
                 localArtPieces.add(artPiece)
                 updateRecyclerView()
                 setupTagFilters()
-            }
+            },
+            fragmentManager = supportFragmentManager
         )
 
         // --- 2) Set up button listeners (profile, etc.) ---
@@ -130,6 +132,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
 
     // ~~~~~~~~~~~~~~~ Navigation-related methods ~~~~~~~~~~~~~~~
 
@@ -195,7 +198,7 @@ class MainActivity : AppCompatActivity() {
     // ~~~~~~~~~~~~~~~ Image Upload Result ~~~~~~~~~~~~~~~
 
     private val resultLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+        ActivityResultContracts.StartActivityForResult()
     ) { result ->
         imageUploadManager.handleImageResult(result.resultCode, result.data)
     }
@@ -375,6 +378,10 @@ class MainActivity : AppCompatActivity() {
         setupArtPieceAdapter()
     }
 
+    fun getFragmentContainerId(): Int {
+        return R.id.fragment_container
+    }
+    
     fun refreshArtPieces(forceImageReload: Boolean = false) {
         loadArtPieces()
         setupTagFilters()

@@ -9,14 +9,18 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.MediaStore
 import android.view.View
+import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.ActivityResultLauncher
+import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
 import com.rs.photoshare.api.PhotoApiService
+import com.rs.photoshare.fragments.TagSuggestionFragment
 import com.rs.photoshare.models.ArtPiece
 import com.rs.photoshare.models.Photo
+import com.rs.photoshare.services.TagSuggestionService
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -33,12 +37,19 @@ class ImageUploadManager(
     private val context: Context,
     private val auth: FirebaseAuth,
     private val progressBar: ProgressBar?,
+    private val fragmentManager: FragmentManager?,
     private val onArtPieceUploaded: (ArtPiece) -> Unit
 ) {
 
     private var imageUri: Uri? = null
     private val cloudinaryManager = CloudinaryManager(context)
     private val predefinedTags = listOf("Warrior", "Wizard", "Doctor", "Engineer", "Custom")
+    private var selectedTags = mutableListOf<String>()
+    private var tagSuggestionService: TagSuggestionService? = null
+
+    init {
+        tagSuggestionService = TagSuggestionService(context)
+    }
 
     // Retrofit instance for the PhotoApiService
     private val retrofit = Retrofit.Builder()
@@ -187,7 +198,7 @@ class ImageUploadManager(
 
         tagLayout.addView(tagLabel)
 
-        val selectedTags = mutableListOf<String>()
+        selectedTags.clear()
         val tagCheckboxes = mutableListOf<CheckBox>()
 
         // Add predefined tag checkboxes
@@ -212,12 +223,33 @@ class ImageUploadManager(
             visibility = View.VISIBLE
         }
 
+        // Add AI tag suggestion button
+        val suggestTagsButton = Button(context).apply {
+            text = "Get AI Tag Suggestions"
+            setOnClickListener {
+                val title = titleInput.text.toString().trim()
+                val description = descriptionInput.text.toString().trim()
+
+                if (title.isEmpty() && description.isEmpty()) {
+                    Toast.makeText(context, "Please enter a title or description first", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                // Store the custom tag input field reference to update it later
+                val customTagRef = customTagInput
+
+                // Show the tag suggestion fragment
+                showTagSuggestionFragment(title, description)
+            }
+        }
+
         layout.addView(titleInput)
         layout.addView(descriptionInput)
         layout.addView(tagLayout)
         layout.addView(customTagInput)
+        layout.addView(suggestTagsButton)
 
-        AlertDialog.Builder(context)
+        val dialog = AlertDialog.Builder(context)
             .setTitle("Add Art Piece Details")
             .setView(layout)
             .setPositiveButton("Save") { _, _ ->
@@ -245,7 +277,132 @@ class ImageUploadManager(
                 }
             }
             .setNegativeButton("Cancel", null)
-            .show()
+            .create()
+
+        dialog.show()
+    }
+
+    private fun showTagSuggestionFragment(title: String, description: String) {
+        fragmentManager?.let { fm ->
+            // Create input text for tag suggestions
+            val inputText = if (title.isNotEmpty() && description.isNotEmpty()) {
+                "$title: $description"
+            } else if (title.isNotEmpty()) {
+                title
+            } else {
+                description
+            }
+
+            // Make sure the fragment container is visible in MainActivity
+            if (context is MainActivity) {
+                (context as MainActivity).hideRecyclerView()
+            }
+
+            // Create the TagSuggestionFragment with your existing implementation
+            val fragment = TagSuggestionFragment.newInstance(inputText)
+
+            // Store a reference to this ImageUploadManager instance in the fragment
+            val field = TagSuggestionFragment::class.java.getDeclaredField("uploadManager")
+            field.isAccessible = true
+            field.set(fragment, this)
+
+            fm.beginTransaction()
+                .replace(R.id.fragment_container, fragment)
+                .addToBackStack(null)
+                .commit()
+        } ?: run {
+            Toast.makeText(context, "Cannot show tag suggestions at this time", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private lateinit var customTagField: EditText
+
+    fun updateSelectedTags(tags: List<String>) {
+        // Store the suggested tags as a single comma-separated string
+        val suggestedTagsText = tags.joinToString(", ")
+
+        // Find the custom tag input in the current dialog
+        try {
+            // Find the dialog that's currently showing
+            val currentDialog = findCurrentDialog()
+            if (currentDialog != null) {
+                // Find the custom tag EditText in the dialog
+                val customTagInput = findCustomTagInput(currentDialog)
+                if (customTagInput != null) {
+                    // Update the custom tag field with the suggested tags
+                    customTagInput.setText(suggestedTagsText)
+                } else {
+                    Toast.makeText(context, "Could not find custom tag field", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            //Log.e("ImageUploadManager", "Error updating tags: ${e.message}", e)
+        }
+    }
+
+    // Helper method to find the current showing dialog
+    private fun findCurrentDialog(): AlertDialog? {
+        try {
+            val field = AlertDialog::class.java.getDeclaredField("mShowing")
+            field.isAccessible = true
+
+            // Get the Activity's Window DecorView
+            val activity = context as? Activity
+            val decorView = activity?.window?.decorView
+
+            // Find all AlertDialog instances within the current window
+            if (decorView != null) {
+                return findAlertDialogInView(decorView)
+            }
+        } catch (e: Exception) {
+            //Log.e("ImageUploadManager", "Error finding dialog: ${e.message}", e)
+        }
+        return null
+    }
+
+    // Recursively search for AlertDialog in the view hierarchy
+    private fun findAlertDialogInView(view: View): AlertDialog? {
+        if (view.tag is AlertDialog) {
+            return view.tag as AlertDialog
+        }
+
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                val child = view.getChildAt(i)
+                val dialog = findAlertDialogInView(child)
+                if (dialog != null) {
+                    return dialog
+                }
+            }
+        }
+
+        return null
+    }
+
+    // Helper method to find the custom tag input in the dialog
+    private fun findCustomTagInput(dialog: AlertDialog): EditText? {
+        val contentView = dialog.findViewById<ViewGroup>(android.R.id.content)
+        return findEditTextWithHint(contentView, "Enter custom tag (optional)")
+    }
+
+    // Recursively search for EditText with specific hint
+    private fun findEditTextWithHint(viewGroup: ViewGroup?, hint: String): EditText? {
+        if (viewGroup == null) return null
+
+        for (i in 0 until viewGroup.childCount) {
+            val child = viewGroup.getChildAt(i)
+
+            if (child is EditText && child.hint == hint) {
+                return child
+            } else if (child is ViewGroup) {
+                val result = findEditTextWithHint(child, hint)
+                if (result != null) {
+                    return result
+                }
+            }
+        }
+
+        return null
     }
 
     private fun uploadImageToCloudinary(title: String, description: String, tags: List<String>) {
