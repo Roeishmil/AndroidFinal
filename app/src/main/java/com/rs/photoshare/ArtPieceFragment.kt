@@ -230,16 +230,24 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
     }
 
     private fun deletePost() {
-        val imageFile = File(artPiece.imageUrl)
-        val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
+        // Optionally, delete the local image file if it's stored locally
+        if (!artPiece.imageUrl.startsWith("http")) {
+            File(artPiece.imageUrl).delete()
+        }
 
-        imageFile.delete()
-        metadataFile.delete()
+        // Delete the JSON file if you still keep it (or remove if no longer used)
+        val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
+        if (metadataFile.exists()) {
+            metadataFile.delete()
+        }
+
+        // Call the MainActivity's deleteArtPiece() to remove it from Room (and update the UI)
+        (activity as? MainActivity)?.deleteArtPiece(artPiece)
 
         Toast.makeText(requireContext(), "Post deleted", Toast.LENGTH_SHORT).show()
-        (activity as? MainActivity)?.refreshArtPieces()
         findNavController().navigateUp()
     }
+
     private fun setupRatingButtons() {
         val likeButton = view?.findViewById<ImageButton>(R.id.likeButtonDetail)
         val dislikeButton = view?.findViewById<ImageButton>(R.id.dislikeButtonDetail)

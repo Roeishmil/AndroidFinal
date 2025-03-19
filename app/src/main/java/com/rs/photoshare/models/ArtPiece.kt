@@ -2,9 +2,12 @@ package com.rs.photoshare.models
 
 import android.os.Parcel
 import android.os.Parcelable
+import androidx.room.Entity
+import androidx.room.PrimaryKey
 
+@Entity(tableName = "art_pieces")
 data class ArtPiece(
-    val artId: String = "",
+    @PrimaryKey val artId: String = "",
     val title: String = "",
     val description: String = "",
     val imageUrl: String = "",
