@@ -19,6 +19,10 @@ import com.rs.photoshare.fragments.TagSuggestionFragment
 import com.rs.photoshare.managers.AuthManager
 import com.rs.photoshare.models.ArtPiece
 import com.squareup.picasso.Picasso
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -36,12 +40,9 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
             }
         }
 
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         artPiece = requireArguments().getParcelable("artPiece")!!
-
         authManager = AuthManager()
     }
 
@@ -54,29 +55,30 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         val imageView = view.findViewById<ImageView>(R.id.artPieceImageView)
         val editButton = view.findViewById<Button>(R.id.editButton)
         val deleteButton = view.findViewById<Button>(R.id.deleteButton)
+        val downloadButton = view.findViewById<Button>(R.id.downloadButton)
         val backButton = view.findViewById<Button>(R.id.backButton)
 
         titleTextView.text = artPiece.title
         descriptionTextView.text = artPiece.description
         tagTextView.text = artPiece.tags.firstOrNull() ?: "No Tag"
-        // Load image differently based on source
+
+        // Load image based on source
         if (artPiece.imageUrl.startsWith("http")) {
-            // Cloudinary URL
             Picasso.get().load(artPiece.imageUrl).into(imageView)
         } else {
-            // Local file
             imageView.setImageBitmap(BitmapFactory.decodeFile(artPiece.imageUrl))
         }
-        //imageView.setImageBitmap(BitmapFactory.decodeFile(artPiece.imageUrl))
 
         val currentUserId = authManager.getCurrentUserId()
         if (artPiece.creatorId != currentUserId) {
             editButton.visibility = View.GONE
             deleteButton.visibility = View.GONE
+            // Optionally, you might show downloadButton for other users as well.
         }
 
         editButton.setOnClickListener { showEditDialog() }
         deleteButton.setOnClickListener { showDeleteConfirmationDialog() }
+        downloadButton.setOnClickListener { downloadImage() }
         backButton.setOnClickListener {
             findNavController().navigateUp()
         }
@@ -87,22 +89,14 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
 
     override fun onTagsSelected(tags: List<String>) {
         if (tags.isNotEmpty()) {
-            // Update the art piece with the new tags
             val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
             if (metadataFile.exists()) {
                 val updatedArtPiece = artPiece.copy(tags = tags)
                 metadataFile.writeText(Gson().toJson(updatedArtPiece))
-
-                // Update the UI
                 view?.findViewById<TextView>(R.id.artPieceTagView)?.text =
                     if (tags.size > 1) tags.joinToString(", ") else tags.firstOrNull() ?: "No Tag"
-
-                // Update the artPiece reference
                 artPiece = updatedArtPiece
-
-                // Refresh main activity
                 (activity as? MainActivity)?.refreshArtPieces()
-
                 Toast.makeText(requireContext(), "Tags updated", Toast.LENGTH_SHORT).show()
             }
         }
@@ -114,7 +108,6 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
             orientation = LinearLayout.VERTICAL
             setPadding(32, 32, 32, 32)
         }
-
         val titleInput = EditText(context).apply {
             hint = "Enter title"
             setText(artPiece.title)
@@ -127,13 +120,10 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
             text = "Change Image"
             setOnClickListener { openImagePicker() }
         }
-
-        // Add tag suggestion button
         val suggestTagsButton = Button(context).apply {
             text = "Suggest Tags"
             setOnClickListener { openTagSuggestions() }
         }
-
         layout.addView(titleInput)
         layout.addView(descriptionInput)
         layout.addView(changeImageButton)
@@ -161,7 +151,6 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
     }
 
     private fun openTagSuggestions() {
-        // Navigate to the tag suggestion fragment
         val tagSuggestionFragment = TagSuggestionFragment.newInstance(artPiece.tags.toString())
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragment_container, tagSuggestionFragment)
@@ -173,8 +162,6 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
         if (metadataFile.exists()) {
             var newImagePath = artPiece.imageUrl
-
-            // If a new image was selected, save it and update the path
             newImageUri?.let { uri ->
                 val savedPath = saveImageLocally(uri, artPiece.artId)
                 if (savedPath != null) {
@@ -184,22 +171,16 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
                     return
                 }
             }
-
             val updatedArtPiece = artPiece.copy(
                 title = newTitle,
                 description = newDescription,
                 imageUrl = newImagePath
             )
-
             metadataFile.writeText(Gson().toJson(updatedArtPiece))
-
-            // If the old image is different, delete it
             if (newImageUri != null && artPiece.imageUrl != newImagePath) {
                 File(artPiece.imageUrl).delete()
             }
-
             Toast.makeText(requireContext(), "Post updated", Toast.LENGTH_SHORT).show()
-
             (activity as? MainActivity)?.refreshArtPieces(forceImageReload = true)
             findNavController().navigateUp()
         }
@@ -220,6 +201,49 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         }
     }
 
+    // New function: downloadImage()
+    private fun downloadImage() {
+        // Only download if the image URL is remote.
+        if (!artPiece.imageUrl.startsWith("http")) {
+            Toast.makeText(requireContext(), "Image is already stored locally", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Download the bitmap synchronously using Picasso.
+                val bitmap = com.squareup.picasso.Picasso.get().load(artPiece.imageUrl).get()
+
+                // Generate a unique file name and save the image locally.
+                val fileName = "download_${System.currentTimeMillis()}.jpg"
+                val localFile = File(requireContext().filesDir, fileName)
+                FileOutputStream(localFile).use { outputStream ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                }
+
+                // Create a new DownloadedImage entry.
+                val downloadedImage = com.rs.photoshare.models.DownloadedImage(
+                    artId = artPiece.artId,
+                    localPath = localFile.absolutePath,
+                    title = artPiece.title,
+                    timestamp = System.currentTimeMillis()
+                )
+
+                // Insert the new DownloadedImage entry into the downloaded_images table.
+                val db = com.rs.photoshare.data.AppDatabase.getDatabase(requireContext())
+                db.downloadedImageDao().insertDownloadedImage(downloadedImage)
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Image downloaded", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     private fun showDeleteConfirmationDialog() {
         AlertDialog.Builder(requireContext())
             .setTitle("Delete Post")
@@ -230,20 +254,14 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
     }
 
     private fun deletePost() {
-        // Optionally, delete the local image file if it's stored locally
         if (!artPiece.imageUrl.startsWith("http")) {
             File(artPiece.imageUrl).delete()
         }
-
-        // Delete the JSON file if you still keep it (or remove if no longer used)
         val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
         if (metadataFile.exists()) {
             metadataFile.delete()
         }
-
-        // Call the MainActivity's deleteArtPiece() to remove it from Room (and update the UI)
         (activity as? MainActivity)?.deleteArtPiece(artPiece)
-
         Toast.makeText(requireContext(), "Post deleted", Toast.LENGTH_SHORT).show()
         findNavController().navigateUp()
     }
@@ -253,57 +271,37 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         val dislikeButton = view?.findViewById<ImageButton>(R.id.dislikeButtonDetail)
         val likeCount = view?.findViewById<TextView>(R.id.likeCountDetail)
         val dislikeCount = view?.findViewById<TextView>(R.id.dislikeCountDetail)
-
-        // Set initial values
         likeCount?.text = artPiece.likes.toString()
         dislikeCount?.text = artPiece.dislikes.toString()
-
         val currentUserId = authManager.getCurrentUserId()
-
-        // Visual indication of user's rating
         if (artPiece.likedBy.contains(currentUserId)) {
-            likeButton?.setImageResource(android.R.drawable.ic_menu_add) // Replace with thumbs up filled
+            likeButton?.setImageResource(android.R.drawable.ic_menu_add)
         } else if (artPiece.dislikedBy.contains(currentUserId)) {
-            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete) // Replace with thumbs down filled
+            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete)
         }
-
-        // Handle like button
-        likeButton?.setOnClickListener {
-            updateRating(true)
-        }
-
-        // Handle dislike button
-        dislikeButton?.setOnClickListener {
-            updateRating(false)
-        }
+        likeButton?.setOnClickListener { updateRating(true) }
+        dislikeButton?.setOnClickListener { updateRating(false) }
     }
 
     private fun updateRating(isLike: Boolean) {
         val currentUserId = authManager.getCurrentUserId()
         val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
-
         if (!metadataFile.exists()) {
             Toast.makeText(requireContext(), "Cannot update rating for this post", Toast.LENGTH_SHORT).show()
             return
         }
-
         val likedBy = artPiece.likedBy.toMutableList()
         val dislikedBy = artPiece.dislikedBy.toMutableList()
-
         var likes = artPiece.likes
         var dislikes = artPiece.dislikes
 
-        // Update liked/disliked lists and counts
         if (isLike) {
             if (likedBy.contains(currentUserId)) {
-                // Already liked, remove like
                 likedBy.remove(currentUserId)
                 likes--
             } else {
-                // Add like and remove dislike if present
                 likedBy.add(currentUserId.toString())
                 likes++
-
                 if (dislikedBy.contains(currentUserId)) {
                     dislikedBy.remove(currentUserId)
                     dislikes--
@@ -311,14 +309,11 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
             }
         } else {
             if (dislikedBy.contains(currentUserId)) {
-                // Already disliked, remove dislike
                 dislikedBy.remove(currentUserId)
                 dislikes--
             } else {
-                // Add dislike and remove like if present
                 dislikedBy.add(currentUserId.toString())
                 dislikes++
-
                 if (likedBy.contains(currentUserId)) {
                     likedBy.remove(currentUserId)
                     likes--
@@ -326,43 +321,30 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
             }
         }
 
-        // Create updated art piece
         val updatedArtPiece = artPiece.copy(
             likes = likes,
             dislikes = dislikes,
             likedBy = likedBy,
             dislikedBy = dislikedBy
         )
-
-        // Save updated art piece
         metadataFile.writeText(Gson().toJson(updatedArtPiece))
-
-        // Update UI
         view?.findViewById<TextView>(R.id.likeCountDetail)?.text = likes.toString()
         view?.findViewById<TextView>(R.id.dislikeCountDetail)?.text = dislikes.toString()
-
-        // Update visual indication
         val likeButton = view?.findViewById<ImageButton>(R.id.likeButtonDetail)
         val dislikeButton = view?.findViewById<ImageButton>(R.id.dislikeButtonDetail)
-
         if (likedBy.contains(currentUserId)) {
-            likeButton?.setImageResource(android.R.drawable.ic_menu_add) // Replace with thumbs up filled
-            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete) // Default dislike icon
+            likeButton?.setImageResource(android.R.drawable.ic_menu_add)
+            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete)
         } else if (dislikedBy.contains(currentUserId)) {
-            likeButton?.setImageResource(android.R.drawable.ic_menu_add) // Default like icon
-            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete) // Replace with thumbs down filled
+            likeButton?.setImageResource(android.R.drawable.ic_menu_add)
+            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete)
         } else {
-            likeButton?.setImageResource(android.R.drawable.ic_menu_add) // Default like icon
-            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete) // Default dislike icon
+            likeButton?.setImageResource(android.R.drawable.ic_menu_add)
+            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete)
         }
-
-        // Update artPiece reference
         artPiece = updatedArtPiece
-
-        // Refresh main activity
         (activity as? MainActivity)?.refreshArtPieces()
     }
-
 
     companion object {
         fun newInstance(artPiece: ArtPiece) = ArtPieceFragment().apply {

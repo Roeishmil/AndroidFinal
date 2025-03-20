@@ -52,6 +52,7 @@ class MainActivity : AppCompatActivity() {
         val clearPostsButton: Button = findViewById(R.id.clearPostsButton)
         val profileButton: Button = findViewById(R.id.profileButton)
         val myArtButton: Button = findViewById(R.id.myArtButton)
+        val downloadedImagesButton: Button = findViewById(R.id.downloadedImagesButton) // NEW button
 
         // Filter UI
         filterContainer = findViewById(R.id.filterContainer)
@@ -63,7 +64,6 @@ class MainActivity : AppCompatActivity() {
         // --- 2) Initialize Room Database + DAO ---
         val database = AppDatabase.getDatabase(this)
         artPieceDao = database.artPieceDao()
-
 
         // --- 3) Set up RecyclerView ---
         artPiecesRecyclerView = findViewById(R.id.artPiecesRecyclerView)
@@ -110,6 +110,11 @@ class MainActivity : AppCompatActivity() {
             imageUploadManager.showImageSourceSelectionDialog(resultLauncher)
         }
         clearPostsButton.setOnClickListener { clearAllLocalArtPieces() }
+
+        // **Navigate to DownloadedImagesFragment** (must be in nav_graph.xml)
+        downloadedImagesButton.setOnClickListener {
+            findNavController(R.id.nav_host_fragment).navigate(R.id.downloadedImagesFragment)
+        }
 
         // --- 6) Load Art Pieces from Room (local storage) ---
         loadArtPieces()
@@ -193,6 +198,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.clearPostsButton).visibility = View.VISIBLE
         findViewById<Button>(R.id.myArtButton).visibility = View.VISIBLE
         findViewById<Button>(R.id.toggleFiltersButton).visibility = View.VISIBLE
+        findViewById<Button>(R.id.downloadedImagesButton).visibility = View.VISIBLE
     }
 
     fun hideMainButtons() {
@@ -200,6 +206,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.clearPostsButton).visibility = View.GONE
         findViewById<Button>(R.id.myArtButton).visibility = View.GONE
         findViewById<Button>(R.id.toggleFiltersButton).visibility = View.GONE
+        findViewById<Button>(R.id.downloadedImagesButton).visibility = View.GONE
     }
 
     fun showRecyclerView() {
@@ -336,6 +343,16 @@ class MainActivity : AppCompatActivity() {
         setupArtPieceAdapter()
     }
 
+    private fun setupArtPieceAdapter() {
+        artPieceAdapter = ArtPieceAdapter(
+            sortArtPiecesByRating(localArtPieces),
+            onItemClick = { artPiece -> openArtPieceFragment(artPiece) },
+            onLikeClick = { artPiece -> updateArtPieceRating(artPiece, true) },
+            onDislikeClick = { artPiece -> updateArtPieceRating(artPiece, false) }
+        )
+        artPiecesRecyclerView.adapter = artPieceAdapter
+    }
+
     fun deleteArtPiece(artPiece: ArtPiece) {
         CoroutineScope(Dispatchers.IO).launch {
             artPieceDao.deleteArtPiece(artPiece)
@@ -347,13 +364,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupArtPieceAdapter() {
-        artPieceAdapter = ArtPieceAdapter(
-            sortArtPiecesByRating(localArtPieces),
-            onItemClick = { artPiece -> openArtPieceFragment(artPiece) },
-            onLikeClick = { artPiece -> updateArtPieceRating(artPiece, true) },
-            onDislikeClick = { artPiece -> updateArtPieceRating(artPiece, false) }
-        )
-        artPiecesRecyclerView.adapter = artPieceAdapter
+    fun updateArtPiece(updatedArtPiece: ArtPiece) {
+        CoroutineScope(Dispatchers.IO).launch {
+            artPieceDao.updateArtPiece(updatedArtPiece)
+            withContext(Dispatchers.Main) {
+                refreshArtPieces()
+            }
+        }
     }
 }

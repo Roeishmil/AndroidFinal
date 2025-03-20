@@ -36,6 +36,11 @@
             android:name="artPiece"
             app:argType="com.rs.photoshare.models.ArtPiece" />
     </fragment>
+    <fragment
+        android:id="@+id/downloadedImagesFragment"
+        android:name="com.rs.photoshare.DownloadedImagesFragment"
+        android:label="Downloaded Images"
+        tools:layout="@layout/fragment_downloaded_images" />
 
 <!--    <fragment-->
 <!--        android:id="@+id/externalPhotosFragment"-->

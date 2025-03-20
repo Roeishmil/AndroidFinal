@@ -11,6 +11,7 @@
         android:id="@+id/backButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="26dp"
         android:text="Back"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -116,10 +117,11 @@
         android:id="@+id/buttonRow"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
         android:orientation="horizontal"
-        app:layout_constraintTop_toBottomOf="@id/ratingLayout"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="@id/ratingLayout"
-        android:layout_marginTop="16dp">
+        app:layout_constraintTop_toBottomOf="@id/ratingLayout">
 
         <Button
             android:id="@+id/editButton"
@@ -131,8 +133,15 @@
             android:id="@+id/deleteButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Delete"
-            android:layout_marginStart="16dp"/>
+            android:layout_marginStart="16dp"
+            android:text="Delete" />
+
+        <Button
+            android:id="@+id/downloadButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="DOWNLOAD" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
