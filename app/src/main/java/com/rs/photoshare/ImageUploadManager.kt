@@ -320,48 +320,39 @@ class ImageUploadManager(
     }
 
     private fun showTagSuggestionFragment(title: String, description: String) {
+        val inputText = when {
+            title.isNotEmpty() && description.isNotEmpty() -> "$title: $description"
+            title.isNotEmpty() -> title
+            else -> description
+        }
+
+        // Set up the callback to receive the suggested tags
+        TagSuggestionFragment.setTagSelectionCallback(object : TagSuggestionFragment.TagSelectionCallback {
+            override fun onTagsSelected(tags: List<String>) {
+                updateSelectedTags(tags)
+                TagSuggestionFragment.clearCallback()
+            }
+        })
+
+        // Prepare the arguments for the tag suggestion dialog
+        val bundle = Bundle().apply {
+            putString("inputText", inputText)
+            if (selectedTags.isNotEmpty()) {
+                val tagsToPass = selectedTags.filter { it != "CUSTOM_TAG_PLACEHOLDER" && it != "AI_TAG_PLACEHOLDER" }
+                putStringArray("selectedTags", tagsToPass.toTypedArray())
+            }
+        }
+
+        // Create and show the TagSuggestionFragment as a dialog
+        val tagDialog = TagSuggestionFragment()
+        tagDialog.arguments = bundle
         fragmentManager?.let { fm ->
-            // Create input text for tag suggestions
-            val inputText = if (title.isNotEmpty() && description.isNotEmpty()) {
-                "$title: $description"
-            } else if (title.isNotEmpty()) {
-                title
-            } else {
-                description
-            }
-
-            // Make sure the fragment container is visible in MainActivity
-            if (context is MainActivity) {
-                (context as MainActivity).hideRecyclerView()
-            }
-
-            // Set up the callback to receive tags back from the fragment
-            TagSuggestionFragment.setTagSelectionCallback(object : TagSuggestionFragment.TagSelectionCallback {
-                override fun onTagsSelected(tags: List<String>) {
-                    // Update the custom tag field with suggested tags
-                    updateSelectedTags(tags)
-                    // Clear callback when done
-                    TagSuggestionFragment.clearCallback()
-                }
-            })
-
-            // Use Navigation Component to navigate to the fragment
-            if (context is MainActivity) {
-                val navController = (context as MainActivity).findNavController(R.id.nav_host_fragment)
-                val bundle = Bundle().apply {
-                    putString("inputText", inputText)
-                    // If needed, pass existing selected tags
-                    if (selectedTags.isNotEmpty()) {
-                        val tagsToPass = selectedTags.filter { it != "CUSTOM_TAG_PLACEHOLDER" && it != "AI_TAG_PLACEHOLDER" }
-                        putStringArray("selectedTags", tagsToPass.toTypedArray())
-                    }
-                }
-                navController.navigate(R.id.tagSuggestionFragment, bundle)
-            }
+            tagDialog.show(fm, "tagSuggestionDialog")
         } ?: run {
             Toast.makeText(context, "Cannot show tag suggestions at this time", Toast.LENGTH_SHORT).show()
         }
     }
+
 
     private  var customTagField: EditText? = null
 

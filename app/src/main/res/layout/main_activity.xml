@@ -5,130 +5,140 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@android:color/white"
     tools:context=".MainActivity">
 
-    <!-- 1) NavHost for fragments (behind everything) -->
+    <!-- 1) NavHostFragment (behind everything) -->
     <fragment
         android:id="@+id/nav_host_fragment"
         android:name="androidx.navigation.fragment.NavHostFragment"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         app:defaultNavHost="true"
-        app:navGraph="@navigation/nav_graph" />
+        app:navGraph="@navigation/nav_graph"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- 2) Top bar for user info & account actions -->
-    <LinearLayout
-        android:id="@+id/topBarLayout"
+    <!-- 2) Top App Bar with a custom layout for user name + account buttons -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topAppBar"
+        style="@style/Widget.MaterialComponents.Toolbar.Primary"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginTop="16dp"
+        android:background="?attr/colorPrimary"
+        android:title=""
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Welcome text on the left -->
+        <!-- User name on the left -->
         <TextView
             android:id="@+id/userNameText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginEnd="8dp"
-            android:text="Welcome, User!"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="16dp"
+            android:text="Welcome, Roei Shmil!"
+            android:textColor="@android:color/white"
             android:textSize="18sp"
             android:textStyle="bold" />
 
-        <!-- Profile button -->
-        <Button
-            android:id="@+id/profileButton"
+        <!-- A horizontal layout for Profile + Logout on the right -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:text="Profile" />
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="16dp"
+            android:orientation="horizontal">
 
-        <!-- Logout button -->
-        <Button
-            android:id="@+id/logoutButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Logout" />
-    </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/profileButton"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Profile"
+                android:textColor="@android:color/white" />
 
-    <!-- 3) Flow layout for action buttons -->
-    <!-- We remove the HorizontalScrollView and replace it with a ConstraintLayout Flow helper. -->
-    <Button
-        android:id="@+id/toggleFiltersButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Show Filters"
-        app:layout_constraintTop_toBottomOf="@+id/topBarLayout"
-        app:layout_constraintStart_toStartOf="parent"
-        android:visibility="visible"
-        android:layout_margin="8dp" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/logoutButton"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Logout"
+                android:textColor="@android:color/white" />
+        </LinearLayout>
+    </com.google.android.material.appbar.MaterialToolbar>
 
-    <Button
+    <!-- 3) Action Buttons arranged via Flow -->
+
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/uploadArtButton"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Upload Art"
         android:layout_margin="8dp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/clearPostsButton"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Clear All"
         android:layout_margin="8dp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/myArtButton"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="My Art"
         android:layout_margin="8dp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/downloadedImagesButton"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Downloaded Images"
         android:layout_margin="8dp" />
 
-    <!-- The Flow helper references the IDs of all action buttons above -->
     <androidx.constraintlayout.helper.widget.Flow
         android:id="@+id/actionButtonsFlow"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        app:flow_wrapMode="chain"
+        app:constraint_referenced_ids="uploadArtButton,clearPostsButton,myArtButton,toggleFiltersButton,downloadedImagesButton"
         app:flow_horizontalGap="8dp"
         app:flow_verticalGap="8dp"
-        app:constraint_referenced_ids="toggleFiltersButton,uploadArtButton,clearPostsButton,myArtButton,downloadedImagesButton"
-        app:layout_constraintTop_toBottomOf="@+id/topBarLayout"
+        app:flow_wrapMode="chain"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintTop_toBottomOf="@+id/topAppBar" />
 
     <!-- 4) Filter container (initially hidden) -->
     <LinearLayout
         android:id="@+id/filterContainer"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:visibility="gone"
         android:orientation="vertical"
-        android:padding="8dp"
+        android:padding="16dp"
+        android:background="?attr/colorSurface"
+        android:elevation="4dp"
+        android:visibility="gone"
         android:layout_marginTop="8dp"
         app:layout_constraintTop_toBottomOf="@+id/actionButtonsFlow"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <TextView
+        <com.google.android.material.textview.MaterialTextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Filter by Tags:"
             android:textStyle="bold"
-            android:paddingBottom="4dp"/>
+            android:paddingBottom="4dp"
+            android:textColor="?attr/colorOnSurface" />
 
         <ScrollView
             android:layout_width="match_parent"
@@ -139,7 +149,7 @@
                 android:id="@+id/tagFilterLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"/>
+                android:orientation="vertical" />
         </ScrollView>
 
         <LinearLayout
@@ -148,21 +158,24 @@
             android:orientation="horizontal"
             android:layout_marginTop="8dp">
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/applyFilterButton"
+                style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:text="Apply Filters"
                 android:layout_weight="1"
-                android:layout_marginEnd="4dp"/>
+                android:layout_marginEnd="4dp" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/clearFilterButton"
+                style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:text="Clear Filters"
                 android:layout_weight="1"
-                android:layout_marginStart="4dp"/>
+                android:layout_marginStart="4dp" />
+
         </LinearLayout>
     </LinearLayout>
 
@@ -175,7 +188,7 @@
         app:layout_constraintTop_toBottomOf="@+id/filterContainer"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"/>
+        app:layout_constraintBottom_toBottomOf="parent" />
 
     <!-- 6) Progress bar in the center -->
     <ProgressBar
@@ -189,13 +202,22 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- 7) Optional overlay fragment container -->
     <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/toggleFiltersButton"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:text="Show Filters" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

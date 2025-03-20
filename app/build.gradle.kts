@@ -102,4 +102,7 @@ dependencies {
     kapt (libs.androidx.room.compiler)
     implementation (libs.androidx.room.ktx)
 
+    implementation (libs.material.v160)
+    implementation (libs.material.v170)
+
 }

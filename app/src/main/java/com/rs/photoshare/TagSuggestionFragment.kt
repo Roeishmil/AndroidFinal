@@ -1,19 +1,13 @@
 package com.rs.photoshare.fragments
 
+import android.app.Dialog
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.EditText
-import android.widget.ProgressBar
-import android.widget.TextView
-import android.widget.Toast
-import androidx.fragment.app.Fragment
+import android.widget.*
+import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.fragment.findNavController
-import androidx.navigation.fragment.navArgs
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.rs.photoshare.R
@@ -22,16 +16,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class TagSuggestionFragment : Fragment() {
+class TagSuggestionFragment : DialogFragment() {
     private lateinit var tagSuggestionService: TagSuggestionService
     private val selectedTags = mutableListOf<String>()
 
-    // Interface for callback
+    // Callback interface for returning tags
     interface TagSelectionCallback {
         fun onTagsSelected(tags: List<String>)
     }
 
-    // Static reference to callback to avoid lifecycle issues
     companion object {
         private var tagSelectionCallback: TagSelectionCallback? = null
 
@@ -57,24 +50,17 @@ class TagSuggestionFragment : Fragment() {
         super.onCreate(savedInstanceState)
         tagSuggestionService = TagSuggestionService(requireContext())
 
-        // Get arguments from the navigation component
-        arguments?.getString("inputText")?.let { inputText ->
-            // Will be used in onViewCreated
-        }
-
+        // Retrieve existing tags passed via arguments (if any)
         arguments?.getStringArray("selectedTags")?.let { tagsArray ->
             selectedTags.addAll(tagsArray)
         }
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        val view = inflater.inflate(R.layout.fragment_tag_suggestion, container, false)
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        val inflater = requireActivity().layoutInflater
+        val view = inflater.inflate(R.layout.fragment_tag_suggestion, null)
 
-        // Initialize UI components
+        // Initialize UI elements
         postContentEditText = view.findViewById(R.id.editTextPostContent)
         suggestButton = view.findViewById(R.id.buttonGetSuggestions)
         progressBar = view.findViewById(R.id.progressBar)
@@ -83,30 +69,18 @@ class TagSuggestionFragment : Fragment() {
         selectedTagsTextView = view.findViewById(R.id.textSelectedTags)
         confirmButton = view.findViewById(R.id.buttonConfirmTags)
 
-        // Set up listeners
         suggestButton.setOnClickListener { getSuggestions() }
         confirmButton.setOnClickListener { confirmTagSelection() }
 
-        return view
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        // Get the input text from arguments if available
+        // Auto-fill content if provided via arguments and trigger suggestions
         arguments?.getString("inputText")?.let { inputText ->
             postContentEditText.setText(inputText)
-            // Automatically trigger suggestions when fragment is created with input text
             getSuggestions()
         }
 
-        // Update selected tags view
-        updateSelectedTagsView()
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        // No need to clear callback here as it might be needed after this fragment is closed
+        return AlertDialog.Builder(requireContext())
+            .setView(view)
+            .create()
     }
 
     private fun getSuggestions() {
@@ -116,31 +90,23 @@ class TagSuggestionFragment : Fragment() {
             return
         }
 
-        // Get existing tags from the app
+        // Fetch existing tags from local files (or other storage)
         val existingTags = getAllExistingTags()
 
-        // Show loading state
-        progressBar.visibility = View.VISIBLE
-        errorTextView.visibility = View.GONE
+        progressBar.visibility = android.view.View.VISIBLE
+        errorTextView.visibility = android.view.View.GONE
         chipGroup.removeAllViews()
 
-        // Get suggestions
         lifecycleScope.launch {
             val suggestions = tagSuggestionService.suggestTags(userInput, existingTags)
-
-            // Make sure UI updates happen on the main thread
             withContext(Dispatchers.Main) {
-                progressBar.visibility = View.GONE
-
+                progressBar.visibility = android.view.View.GONE
                 if (suggestions.isEmpty()) {
-                    errorTextView.text =
-                        "No suggestions available. Try a different description or try again later."
-                    errorTextView.visibility = View.VISIBLE
+                    errorTextView.text = "No suggestions available. Try a different description or try again later."
+                    errorTextView.visibility = android.view.View.VISIBLE
                     return@withContext
                 }
-
-                // Display suggestions as chips
-                chipGroup.removeAllViews() // Make sure to clear previous suggestions
+                chipGroup.removeAllViews()
                 suggestions.forEach { tag ->
                     val chip = Chip(requireContext()).apply {
                         text = tag
@@ -163,24 +129,18 @@ class TagSuggestionFragment : Fragment() {
         }
     }
 
+    // Retrieves existing tags from art metadata files (simplistic implementation)
     private fun getAllExistingTags(): List<String> {
-        // This is a simple implementation. In a real app, you'd likely
-        // get these from a database or repository.
         val tagsSet = mutableSetOf<String>()
         val filesDir = requireContext().filesDir
-
-        // Look through all art piece metadata files
         filesDir.listFiles { file -> file.name.startsWith("art_") && file.name.endsWith(".json") }
             ?.forEach { file ->
                 val jsonContent = file.readText()
-                // Simple regex to extract tags from JSON
                 val tagPattern = "\"tags\":\\s*\\[([^\\]]+)\\]".toRegex()
                 val match = tagPattern.find(jsonContent)
                 match?.groupValues?.getOrNull(1)?.let { tagsJson ->
-                    // Parse tags from JSON array format
                     val tagStrings = tagsJson.split(",")
                     tagStrings.forEach { tagString ->
-                        // Clean up the tag string
                         val cleanTag = tagString.trim().trim('"')
                         if (cleanTag.isNotEmpty()) {
                             tagsSet.add(cleanTag)
@@ -188,25 +148,21 @@ class TagSuggestionFragment : Fragment() {
                     }
                 }
             }
-
         return tagsSet.toList()
     }
 
     private fun updateSelectedTagsView() {
-        if (selectedTags.isEmpty()) {
-            selectedTagsTextView.text = "No tags selected"
+        selectedTagsTextView.text = if (selectedTags.isEmpty()) {
+            "No tags selected"
         } else {
-            selectedTagsTextView.text = "Selected tags: ${selectedTags.joinToString(", ")}"
+            "Selected tags: ${selectedTags.joinToString(", ")}"
         }
     }
 
     private fun confirmTagSelection() {
         try {
-            // Use the static callback to communicate with whoever launched this fragment
             tagSelectionCallback?.onTagsSelected(selectedTags)
-
-            // Navigate back (safe way using Navigation component)
-            findNavController().navigateUp()
+            dismiss()
         } catch (e: Exception) {
             Log.e("TagSuggestionFragment", "Error confirming tags: ${e.message}", e)
             Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
