@@ -1,7 +1,6 @@
 package com.rs.photoshare.models
 
 import android.util.Log
-import android.widget.Toast
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -23,6 +22,12 @@ class PhotoViewModel : ViewModel() {
 
     private val _errorMessage = MutableLiveData<String>()
     val errorMessage: LiveData<String> = _errorMessage
+
+    // Add avatar style-related properties
+    val availableStyles = photoRepository.availableStyles
+
+    private val _currentStyle = MutableLiveData(photoRepository.currentStyle)
+    val currentStyle: LiveData<String> = _currentStyle
 
     fun fetchPhotos(page: Int = 1, limit: Int = 20) {
         _isLoading.value = true
@@ -72,5 +77,15 @@ class PhotoViewModel : ViewModel() {
                 _isLoading.value = false
             }
         )
+    }
+
+    // New method to change avatar style
+    fun setAvatarStyle(style: String) {
+        if (style in availableStyles) {
+            photoRepository.setAvatarStyle(style)
+            _currentStyle.value = style
+            // Refresh photos to show new style
+            fetchPhotos()
+        }
     }
 }

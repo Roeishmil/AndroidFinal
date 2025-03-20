@@ -151,11 +151,16 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
     }
 
     private fun openTagSuggestions() {
-        val tagSuggestionFragment = TagSuggestionFragment.newInstance(artPiece.tags.toString())
-        parentFragmentManager.beginTransaction()
-            .replace(R.id.fragment_container, tagSuggestionFragment)
-            .addToBackStack(null)
-            .commit()
+        // Set up the callback to receive tags back from the fragment
+        TagSuggestionFragment.setTagSelectionCallback(this)
+
+        // Use Navigation Component to navigate to the fragment
+        val bundle = Bundle().apply {
+            putString("inputText", artPiece.title + ": " + artPiece.description)
+            // Pass existing tags
+            putStringArray("selectedTags", artPiece.tags.toTypedArray())
+        }
+        findNavController().navigate(R.id.tagSuggestionFragment, bundle)
     }
 
     private fun updatePost(newTitle: String, newDescription: String) {
@@ -275,9 +280,9 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         dislikeCount?.text = artPiece.dislikes.toString()
         val currentUserId = authManager.getCurrentUserId()
         if (artPiece.likedBy.contains(currentUserId)) {
-            likeButton?.setImageResource(android.R.drawable.ic_menu_add)
+            likeButton?.setImageResource(R.drawable.baseline_thumb_up_off_alt_24)
         } else if (artPiece.dislikedBy.contains(currentUserId)) {
-            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete)
+            dislikeButton?.setImageResource(R.drawable.baseline_thumb_down_off_alt_24)
         }
         likeButton?.setOnClickListener { updateRating(true) }
         dislikeButton?.setOnClickListener { updateRating(false) }
@@ -333,14 +338,14 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         val likeButton = view?.findViewById<ImageButton>(R.id.likeButtonDetail)
         val dislikeButton = view?.findViewById<ImageButton>(R.id.dislikeButtonDetail)
         if (likedBy.contains(currentUserId)) {
-            likeButton?.setImageResource(android.R.drawable.ic_menu_add)
-            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete)
+            likeButton?.setImageResource(R.drawable.baseline_thumb_up_off_alt_24)
+            dislikeButton?.setImageResource(R.drawable.baseline_thumb_down_24)
         } else if (dislikedBy.contains(currentUserId)) {
-            likeButton?.setImageResource(android.R.drawable.ic_menu_add)
-            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete)
+            likeButton?.setImageResource(R.drawable.baseline_thumb_up_24)
+            dislikeButton?.setImageResource(R.drawable.baseline_thumb_down_off_alt_24)
         } else {
-            likeButton?.setImageResource(android.R.drawable.ic_menu_add)
-            dislikeButton?.setImageResource(android.R.drawable.ic_menu_delete)
+            likeButton?.setImageResource(R.drawable.baseline_thumb_up_24)
+            dislikeButton?.setImageResource(R.drawable.baseline_thumb_down_24)
         }
         artPiece = updatedArtPiece
         (activity as? MainActivity)?.refreshArtPieces()

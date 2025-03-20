@@ -211,12 +211,16 @@ class MainActivity : AppCompatActivity() {
 
     fun showRecyclerView() {
         artPiecesRecyclerView.visibility = View.VISIBLE
-        findViewById<View>(R.id.nav_host_fragment).visibility = View.GONE
+        // Don't hide the navigation host fragment completely
+        // Just make sure you're on the home fragment
+        val navController = findNavController(R.id.nav_host_fragment)
+        if (navController.currentDestination?.id != R.id.homeFragment) {
+            navController.navigate(R.id.homeFragment)
+        }
     }
 
     fun hideRecyclerView() {
         artPiecesRecyclerView.visibility = View.GONE
-        findViewById<View>(R.id.nav_host_fragment).visibility = View.VISIBLE
     }
 
     // --- Image Upload Result ---
@@ -242,6 +246,8 @@ class MainActivity : AppCompatActivity() {
             artPieceAdapter.updateList(sortArtPiecesByRating(localArtPieces))
         } else {
             val filteredList = localArtPieces.filter { piece ->
+                // Current implementation only shows posts that have ANY selected tag
+                // We should ensure it filters correctly
                 piece.tags.any { tag -> selectedTags.contains(tag) }
             }
             artPieceAdapter.updateList(sortArtPiecesByRating(filteredList))
@@ -252,6 +258,7 @@ class MainActivity : AppCompatActivity() {
         tagFilterLayout.removeAllViews()
         selectedTags.clear()
         val uniqueTags = localArtPieces.flatMap { it.tags }.distinct().sorted()
+
         if (uniqueTags.isEmpty()) {
             val textView = TextView(this)
             textView.text = "No tags available"
@@ -259,11 +266,19 @@ class MainActivity : AppCompatActivity() {
             tagFilterLayout.addView(textView)
             return
         }
+
         for (tag in uniqueTags) {
+            // Skip empty tags
+            if (tag.isBlank()) continue
+
             val checkBox = CheckBox(this).apply {
                 text = tag
                 setOnCheckedChangeListener { _, isChecked ->
-                    if (isChecked) selectedTags.add(tag) else selectedTags.remove(tag)
+                    if (isChecked) {
+                        selectedTags.add(tag)
+                    } else {
+                        selectedTags.remove(tag)
+                    }
                 }
             }
             tagFilterLayout.addView(checkBox)

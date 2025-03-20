@@ -12,21 +12,37 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
+import androidx.navigation.fragment.navArgs
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
-import com.rs.photoshare.ImageUploadManager
 import com.rs.photoshare.R
 import com.rs.photoshare.services.TagSuggestionService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 class TagSuggestionFragment : Fragment() {
-    private lateinit var uploadManager: ImageUploadManager
     private lateinit var tagSuggestionService: TagSuggestionService
     private val selectedTags = mutableListOf<String>()
-    var callback: TagSelectionCallback? = null
+
+    // Interface for callback
+    interface TagSelectionCallback {
+        fun onTagsSelected(tags: List<String>)
+    }
+
+    // Static reference to callback to avoid lifecycle issues
+    companion object {
+        private var tagSelectionCallback: TagSelectionCallback? = null
+
+        fun setTagSelectionCallback(callback: TagSelectionCallback) {
+            tagSelectionCallback = callback
+        }
+
+        fun clearCallback() {
+            tagSelectionCallback = null
+        }
+    }
 
     // UI components
     private lateinit var postContentEditText: EditText
@@ -40,6 +56,15 @@ class TagSuggestionFragment : Fragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         tagSuggestionService = TagSuggestionService(requireContext())
+
+        // Get arguments from the navigation component
+        arguments?.getString("inputText")?.let { inputText ->
+            // Will be used in onViewCreated
+        }
+
+        arguments?.getStringArray("selectedTags")?.let { tagsArray ->
+            selectedTags.addAll(tagsArray)
+        }
     }
 
     override fun onCreateView(
@@ -62,13 +87,26 @@ class TagSuggestionFragment : Fragment() {
         suggestButton.setOnClickListener { getSuggestions() }
         confirmButton.setOnClickListener { confirmTagSelection() }
 
-        // Check if we have existing tags to display
-        arguments?.getStringArrayList("selectedTags")?.let { tags ->
-            selectedTags.addAll(tags)
-            updateSelectedTagsView()
+        return view
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        // Get the input text from arguments if available
+        arguments?.getString("inputText")?.let { inputText ->
+            postContentEditText.setText(inputText)
+            // Automatically trigger suggestions when fragment is created with input text
+            getSuggestions()
         }
 
-        return view
+        // Update selected tags view
+        updateSelectedTagsView()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        // No need to clear callback here as it might be needed after this fragment is closed
     }
 
     private fun getSuggestions() {
@@ -151,7 +189,6 @@ class TagSuggestionFragment : Fragment() {
                 }
             }
 
-
         return tagsSet.toList()
     }
 
@@ -165,48 +202,14 @@ class TagSuggestionFragment : Fragment() {
 
     private fun confirmTagSelection() {
         try {
-            // Try to use the uploadManager reference
-            if (::uploadManager.isInitialized) {
-                uploadManager.updateSelectedTags(selectedTags)
-                // Go back to previous screen
-                parentFragmentManager.popBackStack()
-            } else {
-                Toast.makeText(requireContext(), "Upload manager not initialized", Toast.LENGTH_SHORT).show()
-            }
+            // Use the static callback to communicate with whoever launched this fragment
+            tagSelectionCallback?.onTagsSelected(selectedTags)
+
+            // Navigate back (safe way using Navigation component)
+            findNavController().navigateUp()
         } catch (e: Exception) {
             Log.e("TagSuggestionFragment", "Error confirming tags: ${e.message}", e)
             Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        // Get the input text from arguments if available
-        arguments?.getString("inputText")?.let { inputText ->
-            postContentEditText.setText(inputText)
-            // Automatically trigger suggestions when fragment is created with input text
-            getSuggestions()
-        }
-    }
-
-
-
-    interface TagSelectionCallback {
-        fun onTagsSelected(tags: List<String>)
-    }
-
-    fun setTagSelectionCallback(callback: TagSelectionCallback) {
-        this.callback = callback
-    }
-
-    companion object {
-        fun newInstance(inputText: String): TagSuggestionFragment {
-            val fragment = TagSuggestionFragment()
-            val args = Bundle()
-            args.putString("inputText", inputText)
-            fragment.arguments = args
-            return fragment
         }
     }
 }

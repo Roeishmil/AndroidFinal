@@ -7,16 +7,19 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Bundle
 import android.provider.MediaStore
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.ActivityResultLauncher
 import androidx.fragment.app.FragmentManager
+import androidx.navigation.findNavController
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
 import com.rs.photoshare.api.PhotoApiService
+import com.rs.photoshare.api.RetrofitClient
 import com.rs.photoshare.fragments.TagSuggestionFragment
 import com.rs.photoshare.models.ArtPiece
 import com.rs.photoshare.models.Photo
@@ -51,13 +54,9 @@ class ImageUploadManager(
         tagSuggestionService = TagSuggestionService(context)
     }
 
-    // Retrofit instance for the PhotoApiService
-    private val retrofit = Retrofit.Builder()
-        .baseUrl("https://picsum.photos/")
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
 
-    private val photoApiService = retrofit.create(PhotoApiService::class.java)
+    // Use the shared PhotoApiService from RetrofitClient
+    private val photoApiService = RetrofitClient.photoApiService
 
     // Method to show image source selection dialog
     fun showImageSourceSelectionDialog(launcher: ActivityResultLauncher<Intent>) {
@@ -80,71 +79,72 @@ class ImageUploadManager(
         launcher.launch(intent)
     }
 
-    // New method to display and select online photos
+    // Inside ImageUploadManager.kt, update the showOnlinePhotoSelectionDialog method
+
     private fun showOnlinePhotoSelectionDialog(launcher: ActivityResultLauncher<Intent>) {
         val dialogView = View.inflate(context, R.layout.dialog_online_photos, null)
         val recyclerView = dialogView.findViewById<RecyclerView>(R.id.onlinePhotosRecyclerView)
         val loadingProgressBar = dialogView.findViewById<ProgressBar>(R.id.loadingProgressBar)
 
-        recyclerView.layoutManager = GridLayoutManager(context, 2)
+        recyclerView.layoutManager = GridLayoutManager(context, 3)
 
         val dialog = AlertDialog.Builder(context)
-            .setTitle("Select an Online Photo")
+            .setTitle("Select a Photo")
             .setView(dialogView)
             .setNegativeButton("Cancel", null)
             .create()
 
         loadingProgressBar.visibility = View.VISIBLE
 
-        // Fetch photos from API
-        photoApiService.getPhotos(page = 1, limit = 20).enqueue(object : Callback<List<Photo>> {
-            override fun onResponse(call: Call<List<Photo>>, response: Response<List<Photo>>) {
-                loadingProgressBar.visibility = View.GONE
+        // Use the repository to fetch random user photos
+        val photoRepository = com.rs.photoshare.repository.PhotoRepository()
+        photoRepository.getPhotos(
+            limit = 20,
+            onSuccess = { photos ->
+                val adapter = OnlinePhotoAdapter(photos) { selectedPhoto ->
+                    dialog.dismiss()
 
-                if (response.isSuccessful) {
-                    val photos = response.body() ?: emptyList()
+                    progressBar?.visibility = View.VISIBLE
+                    Thread {
+                        try {
+                            // Download the image to a temporary file
+                            val tempFile = downloadImageToTempFile(selectedPhoto.download_url)
 
-                    val adapter = OnlinePhotoAdapter(photos) { selectedPhoto ->
-                        dialog.dismiss()
+                            // Convert to URI
+                            val contentUri = Uri.fromFile(tempFile)
 
-                        progressBar?.visibility = View.VISIBLE
-                        Thread {
-                            try {
-                                // Download the image to a temporary file
-                                val tempFile = downloadImageToTempFile(selectedPhoto.download_url)
-
-                                // Convert to URI
-                                val contentUri = Uri.fromFile(tempFile)
-
-                                // Update UI on main thread
-                                (context as? Activity)?.runOnUiThread {
-                                    progressBar?.visibility = View.GONE
-                                    imageUri = contentUri
-                                    showAddDetailsDialog()
-                                }
-                            } catch (e: Exception) {
-                                (context as? Activity)?.runOnUiThread {
-                                    progressBar?.visibility = View.GONE
-                                    Toast.makeText(context, "Failed to download image: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
+                            // Update UI on main thread
+                            (context as? Activity)?.runOnUiThread {
+                                progressBar?.visibility = View.GONE
+                                imageUri = contentUri
+                                showAddDetailsDialog()
                             }
-                        }.start()
-                    }
+                        } catch (e: Exception) {
+                            (context as? Activity)?.runOnUiThread {
+                                progressBar?.visibility = View.GONE
+                                Toast.makeText(context, "Failed to download image: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }.start()
+                }
 
+                (context as? Activity)?.runOnUiThread {
                     recyclerView.adapter = adapter
-                } else {
-                    Toast.makeText(context, "Failed to load photos: ${response.message()}", Toast.LENGTH_SHORT).show()
+                    loadingProgressBar.visibility = View.GONE
+                }
+            },
+            onError = { error ->
+                (context as? Activity)?.runOnUiThread {
+                    loadingProgressBar.visibility = View.GONE
+                    Toast.makeText(context, "Error loading photos: $error", Toast.LENGTH_SHORT).show()
                 }
             }
-
-            override fun onFailure(call: Call<List<Photo>>, t: Throwable) {
-                loadingProgressBar.visibility = View.GONE
-                Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
-            }
-        })
+        )
 
         dialog.show()
     }
+
+
 
     // Download image from URL to a temporary file
     private fun downloadImageToTempFile(imageUrl: String): File {
@@ -198,30 +198,55 @@ class ImageUploadManager(
 
         tagLayout.addView(tagLabel)
 
+        // Create custom tag input before using it in the listeners
+        val customTagInput = EditText(context).apply {
+            hint = "Enter custom tag (optional)"
+            visibility = View.GONE  // Initially hidden
+        }
+
+        // Store this reference so TagSuggestionFragment can access it
+        this.customTagField = customTagInput
+
         selectedTags.clear()
         val tagCheckboxes = mutableListOf<CheckBox>()
 
-        // Add predefined tag checkboxes
-        predefinedTags.forEach { tag ->
-            val checkbox = CheckBox(context).apply {
-                text = tag
-                setOnCheckedChangeListener { _, isChecked ->
-                    if (isChecked) {
-                        selectedTags.add(tag)
-                    } else {
-                        selectedTags.remove(tag)
+        // Create a checkbox for custom tag option
+        val customTagCheckbox = CheckBox(context).apply {
+            text = "Custom Tag"
+            setOnCheckedChangeListener { _, isChecked ->
+                if (isChecked) {
+                    selectedTags.add("CUSTOM_TAG_PLACEHOLDER")
+                    customTagInput.visibility = View.VISIBLE
+                } else {
+                    selectedTags.remove("CUSTOM_TAG_PLACEHOLDER")
+                    if (!selectedTags.contains("AI_TAG_PLACEHOLDER")) {
+                        customTagInput.visibility = View.GONE
                     }
                 }
             }
-            tagCheckboxes.add(checkbox)
-            tagLayout.addView(checkbox)
         }
 
-        // Add custom tag input
-        val customTagInput = EditText(context).apply {
-            hint = "Enter custom tag (optional)"
-            visibility = View.VISIBLE
+        // Add predefined tag checkboxes
+        predefinedTags.forEach { tag ->
+            if (tag != "Custom") { // Skip the "Custom" tag as we're handling it separately
+                val checkbox = CheckBox(context).apply {
+                    text = tag
+                    setOnCheckedChangeListener { _, isChecked ->
+                        if (isChecked) {
+                            selectedTags.add(tag)
+                        } else {
+                            selectedTags.remove(tag)
+                        }
+                    }
+                }
+                tagCheckboxes.add(checkbox)
+                tagLayout.addView(checkbox)
+            }
         }
+
+        // Add our new custom tag checkbox
+        tagCheckboxes.add(customTagCheckbox)
+        tagLayout.addView(customTagCheckbox)
 
         // Add AI tag suggestion button
         val suggestTagsButton = Button(context).apply {
@@ -235,8 +260,11 @@ class ImageUploadManager(
                     return@setOnClickListener
                 }
 
-                // Store the custom tag input field reference to update it later
-                val customTagRef = customTagInput
+                // Add a special placeholder for AI tags
+                selectedTags.add("AI_TAG_PLACEHOLDER")
+
+                // Make sure custom tag input is visible for the AI suggestion result
+                customTagInput.visibility = View.VISIBLE
 
                 // Show the tag suggestion fragment
                 showTagSuggestionFragment(title, description)
@@ -262,13 +290,22 @@ class ImageUploadManager(
                 // Add custom tag if provided
                 val customTag = customTagInput.text.toString().trim()
                 if (customTag.isNotEmpty()) {
-                    finalTags.add(customTag)
+                    // Remove placeholders and add the actual custom tag
+                    finalTags.remove("CUSTOM_TAG_PLACEHOLDER")
+                    finalTags.remove("AI_TAG_PLACEHOLDER")
+
+                    // Split by commas to handle multiple tags
+                    customTag.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { tag ->
+                        finalTags.add(tag)
+                    }
                 }
 
-                // Remove "Custom" tag if it was selected but replace with actual custom tag
-                if (finalTags.contains("Custom") && customTag.isNotEmpty()) {
-                    finalTags.remove("Custom")
-                }
+                // Remove placeholders if they still exist
+                finalTags.remove("CUSTOM_TAG_PLACEHOLDER")
+                finalTags.remove("AI_TAG_PLACEHOLDER")
+
+                // Remove "Custom" tag if it was selected (legacy)
+                finalTags.remove("Custom")
 
                 if (title.isEmpty() || description.isEmpty() || finalTags.isEmpty()) {
                     Toast.makeText(context, "Title, description and at least one tag are required", Toast.LENGTH_SHORT).show()
@@ -298,45 +335,61 @@ class ImageUploadManager(
                 (context as MainActivity).hideRecyclerView()
             }
 
-            // Create the TagSuggestionFragment with your existing implementation
-            val fragment = TagSuggestionFragment.newInstance(inputText)
+            // Set up the callback to receive tags back from the fragment
+            TagSuggestionFragment.setTagSelectionCallback(object : TagSuggestionFragment.TagSelectionCallback {
+                override fun onTagsSelected(tags: List<String>) {
+                    // Update the custom tag field with suggested tags
+                    updateSelectedTags(tags)
+                    // Clear callback when done
+                    TagSuggestionFragment.clearCallback()
+                }
+            })
 
-            // Store a reference to this ImageUploadManager instance in the fragment
-            val field = TagSuggestionFragment::class.java.getDeclaredField("uploadManager")
-            field.isAccessible = true
-            field.set(fragment, this)
-
-            fm.beginTransaction()
-                .replace(R.id.fragment_container, fragment)
-                .addToBackStack(null)
-                .commit()
+            // Use Navigation Component to navigate to the fragment
+            if (context is MainActivity) {
+                val navController = (context as MainActivity).findNavController(R.id.nav_host_fragment)
+                val bundle = Bundle().apply {
+                    putString("inputText", inputText)
+                    // If needed, pass existing selected tags
+                    if (selectedTags.isNotEmpty()) {
+                        val tagsToPass = selectedTags.filter { it != "CUSTOM_TAG_PLACEHOLDER" && it != "AI_TAG_PLACEHOLDER" }
+                        putStringArray("selectedTags", tagsToPass.toTypedArray())
+                    }
+                }
+                navController.navigate(R.id.tagSuggestionFragment, bundle)
+            }
         } ?: run {
             Toast.makeText(context, "Cannot show tag suggestions at this time", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private lateinit var customTagField: EditText
+    private  var customTagField: EditText? = null
 
     fun updateSelectedTags(tags: List<String>) {
         // Store the suggested tags as a single comma-separated string
         val suggestedTagsText = tags.joinToString(", ")
 
-        // Find the custom tag input in the current dialog
-        try {
-            // Find the dialog that's currently showing
-            val currentDialog = findCurrentDialog()
-            if (currentDialog != null) {
-                // Find the custom tag EditText in the dialog
-                val customTagInput = findCustomTagInput(currentDialog)
-                if (customTagInput != null) {
-                    // Update the custom tag field with the suggested tags
-                    customTagInput.setText(suggestedTagsText)
-                } else {
-                    Toast.makeText(context, "Could not find custom tag field", Toast.LENGTH_SHORT).show()
+        // Try a direct update of the stored field
+        customTagField?.setText(suggestedTagsText)
+
+        // If that doesn't work, try the legacy approach
+        if (customTagField == null) {
+            try {
+                // Find the dialog that's currently showing
+                val currentDialog = findCurrentDialog()
+                if (currentDialog != null) {
+                    // Find the custom tag EditText in the dialog
+                    val customTagInput = findCustomTagInput(currentDialog)
+                    if (customTagInput != null) {
+                        // Update the custom tag field with the suggested tags
+                        customTagInput.setText(suggestedTagsText)
+                    } else {
+                        Toast.makeText(context, "Could not find custom tag field", Toast.LENGTH_SHORT).show()
+                    }
                 }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error updating tags: ${e.message}", Toast.LENGTH_SHORT).show()
             }
-        } catch (e: Exception) {
-            //Log.e("ImageUploadManager", "Error updating tags: ${e.message}", e)
         }
     }
 

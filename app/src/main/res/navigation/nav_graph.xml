@@ -42,10 +42,22 @@
         android:label="Downloaded Images"
         tools:layout="@layout/fragment_downloaded_images" />
 
-<!--    <fragment-->
-<!--        android:id="@+id/externalPhotosFragment"-->
-<!--        android:name="com.rs.photoshare.ExternalPhotosFragment"-->
-<!--        android:label="External Photos"-->
-<!--        tools:layout="@layout/fragment_external_photos" />-->
+    <fragment
+        android:id="@+id/tagSuggestionFragment"
+        android:name="com.rs.photoshare.fragments.TagSuggestionFragment"
+        android:label="Tag Suggestions"
+        tools:layout="@layout/fragment_tag_suggestion">
+        <!-- Add arguments for input text and selected tags -->
+        <argument
+            android:name="inputText"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+        <argument
+            android:name="selectedTags"
+            app:argType="string[]"
+            app:nullable="true"
+            android:defaultValue="@null" />
+    </fragment>
 
 </navigation>

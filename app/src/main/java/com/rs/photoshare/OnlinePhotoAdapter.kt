@@ -19,18 +19,14 @@ class OnlinePhotoAdapter(
         private val authorTextView: TextView = itemView.findViewById(R.id.photoAuthorTextView)
 
         fun bind(photo: Photo, onPhotoSelected: (Photo) -> Unit) {
-            // Load the thumbnail version of the image
-            val thumbnailUrl = photo.download_url.replace(
-                Regex("(\\d+)/(\\d+)$"),
-                "300/300"
-            )
-
+            // Load the JPG image using Picasso
             Picasso.get()
-                .load(thumbnailUrl)
+                .load(photo.url)
                 .placeholder(R.drawable.placeholder_image)
                 .error(R.drawable.error_image)
                 .into(imageView)
 
+            // Show author name
             authorTextView.text = photo.author
 
             itemView.setOnClickListener { onPhotoSelected(photo) }
