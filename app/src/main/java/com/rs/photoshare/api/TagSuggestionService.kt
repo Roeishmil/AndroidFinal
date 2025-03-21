@@ -15,7 +15,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class TagSuggestionService(private val context: Context) {
-    private val apiKey = "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" // Move to BuildConfig or secure storage
+    private val apiKey = "" // Move to BuildConfig or secure storage
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
