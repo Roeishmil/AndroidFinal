@@ -72,15 +72,15 @@ class CloudinaryManager(private val context: Context) {
             "dislikes" to artPiece.dislikes.toString()
         )
 
-        // Convert metadata to the format Cloudinary expects
-        val context = metadata.entries.joinToString("|") { "${it.key}=${it.value}" }
+        // Format context properly for Cloudinary
+        val contextParams = metadata.entries.joinToString("|") { "${it.key}=${it.value}" }
 
         MediaManager.get().upload(imageFile.absolutePath)
             .unsigned("ml_default") // Uses an unsigned preset for security
             .option("folder", "art_pieces") // Stores images inside the "art_pieces" folder
             .option("resource_type", "image")
             .option("public_id", artPiece.artId) // Use artId as public_id for better tracking
-            .option("context", "custom=$context") // Add metadata as context
+            .option("context", contextParams) // Add metadata directly without "custom=" prefix
             .callback(object : UploadCallback {
                 override fun onStart(requestId: String) {
                     // Triggered when upload starts

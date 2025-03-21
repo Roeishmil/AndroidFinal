@@ -88,18 +88,28 @@ class CloudinaryRepository(private val context: Context) {
             val basicAuth = "Basic " + android.util.Base64.encodeToString(credentials.toByteArray(), android.util.Base64.NO_WRAP)
             connection.setRequestProperty("Authorization", basicAuth)
 
-            // Request body
+            // Request body - IMPORTANT CHANGES HERE
             val body = JSONObject().apply {
                 put("expression", expression)
                 put("timestamp", timestamp)
                 put("api_key", API_KEY)
                 put("signature", signature)
                 put("max_results", 500)
-                put("with_field", JSONArray().apply { put("context") }) // optional but safe
-                put("return_fields", JSONArray().apply { put("context"); put("public_id"); put("secure_url"); put("tags") }) // Force it to return metadata
+                // Make sure we explicitly request context
+                put("with_field", JSONArray().apply {
+                    put("context")
+                    put("tags")
+                })
+                // Return specific fields including context
+                put("return_fields", JSONArray().apply {
+                    put("public_id")
+                    put("secure_url")
+                    put("context")
+                    put("tags")
+                })
             }
 
-
+            Log.d(TAG, "Request body: ${body.toString()}")
 
             val outputBytes = body.toString().toByteArray(Charsets.UTF_8)
             connection.outputStream.use { it.write(outputBytes) }
@@ -109,6 +119,7 @@ class CloudinaryRepository(private val context: Context) {
 
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 val response = connection.inputStream.bufferedReader().use { it.readText() }
+                Log.d(TAG, "Response body: $response")
                 val jsonResponse = JSONObject(response)
 
                 if (jsonResponse.has("resources")) {
@@ -151,17 +162,46 @@ class CloudinaryRepository(private val context: Context) {
             val publicId = resource.getString("public_id").replace("$FOLDER_PATH/", "")
             val secureUrl = resource.getString("secure_url")
 
+            // Debug log to see what we're getting from Cloudinary
+            Log.d(TAG, "Raw resource data: ${resource.toString()}")
+
             // Extract context metadata if available
-            val context = resource.optJSONObject("context")?.optJSONObject("custom") ?: JSONObject()
+            val contextObj = resource.optJSONObject("context")
+
+            // Log the context structure so we can see what's being returned
+            if (contextObj != null) {
+                Log.d(TAG, "Context structure: ${contextObj.toString()}")
+            } else {
+                Log.d(TAG, "No context found in resource")
+            }
+
+            // Check both direct context and context.custom objects
+            val metadata = when {
+                contextObj != null -> {
+                    // Try direct access first
+                    if (contextObj.has("title") || contextObj.has("description")) {
+                        contextObj
+                    }
+                    // Then try custom container
+                    else if (contextObj.has("custom")) {
+                        contextObj.optJSONObject("custom") ?: JSONObject()
+                    }
+                    // Fallback
+                    else {
+                        JSONObject()
+                    }
+                }
+                else -> JSONObject()
+            }
 
             // Extract metadata or use defaults
-            val title = context.optString("title", "Untitled")
-            val description = context.optString("description", "")
-            val tagsString = context.optString("tags", "")
-            val creatorId = context.optString("creator_id", "unknown")
-            val timestamp = context.optLong("timestamp", System.currentTimeMillis())
-            val likes = context.optInt("likes", 0)
-            val dislikes = context.optInt("dislikes", 0)
+            val title = metadata.optString("title", "Untitled")
+            val description = metadata.optString("description", "")
+            val tagsString = metadata.optString("tags", "")
+            val creatorId = metadata.optString("creator_id", "unknown")
+            val timestamp = metadata.optLong("timestamp", System.currentTimeMillis())
+            val likes = metadata.optInt("likes", 0)
+            val dislikes = metadata.optInt("dislikes", 0)
 
             // Parse tags - handle both resource tags and context tags
             val tags = when {
@@ -177,7 +217,7 @@ class CloudinaryRepository(private val context: Context) {
                 }
             }
 
-            return ArtPiece(
+            val artPiece = ArtPiece(
                 artId = publicId,
                 title = title,
                 description = description,
@@ -190,8 +230,14 @@ class CloudinaryRepository(private val context: Context) {
                 likedBy = listOf(),  // We'll need to manage these locally
                 dislikedBy = listOf() // We'll need to manage these locally
             )
+
+            // Log the final parsed result
+            Log.d(TAG, "Parsed ArtPiece: $artPiece")
+
+            return artPiece
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing resource to ArtPiece: ${e.message}")
+            e.printStackTrace()
             return null
         }
     }
