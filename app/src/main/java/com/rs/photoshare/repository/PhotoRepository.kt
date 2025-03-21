@@ -8,20 +8,23 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
+// Repository for handling photo-related data operations.
 class PhotoRepository {
     private val TAG = "PhotoRepository"
     private val photoApiService = RetrofitClient.photoApiService
 
-    // Add available styles for avatars (for the avatar style feature)
+    // Available avatar styles for the avatar feature.
     val availableStyles = listOf("avataaars", "bottts", "micah", "adventurer", "identicon")
     var currentStyle = "avataaars" // Default style
 
+    // Set avatar style if valid.
     fun setAvatarStyle(style: String) {
         if (style in availableStyles) {
             currentStyle = style
         }
     }
 
+    // Fetch a list of photos (mapped from random users).
     fun getPhotos(
         page: Int = 1,
         limit: Int = 20,
@@ -33,7 +36,6 @@ class PhotoRepository {
                 if (response.isSuccessful) {
                     val randomUserResponse = response.body()
                     if (randomUserResponse != null) {
-                        // Convert RandomUser objects to Photo objects
                         val photos = randomUserResponse.results.map { user ->
                             Photo(
                                 id = user.login.uuid,
@@ -59,13 +61,12 @@ class PhotoRepository {
         })
     }
 
+    // Fetch details for a specific photo (simulated with a random user).
     fun getPhotoDetails(
         id: String,
         onSuccess: (Photo) -> Unit,
         onError: (String) -> Unit
     ) {
-        // For a single photo with ID, we'll need to make a request to get a new random user
-        // and pretend it's the one with the requested ID
         photoApiService.getRandomUsers(results = 1).enqueue(object : Callback<RandomUserResponse> {
             override fun onResponse(call: Call<RandomUserResponse>, response: Response<RandomUserResponse>) {
                 if (response.isSuccessful) {
@@ -73,7 +74,7 @@ class PhotoRepository {
                     if (randomUserResponse != null && randomUserResponse.results.isNotEmpty()) {
                         val user = randomUserResponse.results[0]
                         val photo = Photo(
-                            id = id, // Use the requested ID
+                            id = id,
                             author = "${user.name.first} ${user.name.last}",
                             width = 300,
                             height = 300,
@@ -95,6 +96,7 @@ class PhotoRepository {
         })
     }
 
+    // Fetch photos by a specific author (random user data, author overridden).
     fun getPhotosByAuthor(
         author: String,
         page: Int = 1,
@@ -102,17 +104,15 @@ class PhotoRepository {
         onSuccess: (List<Photo>) -> Unit,
         onError: (String) -> Unit
     ) {
-        // Just get random photos and assign the author
         photoApiService.getRandomUsers(results = limit, page = page).enqueue(object : Callback<RandomUserResponse> {
             override fun onResponse(call: Call<RandomUserResponse>, response: Response<RandomUserResponse>) {
                 if (response.isSuccessful) {
                     val randomUserResponse = response.body()
                     if (randomUserResponse != null) {
-                        // Convert RandomUser objects to Photo objects with specified author
                         val photos = randomUserResponse.results.map { user ->
                             Photo(
                                 id = user.login.uuid,
-                                author = author, // Use the requested author
+                                author = author,
                                 width = 128,
                                 height = 128,
                                 url = user.picture.medium,

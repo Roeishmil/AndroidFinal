@@ -14,8 +14,11 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+/**
+ * Service to suggest tags using OpenAI's API, with caching and rate limiting.
+ */
 class TagSuggestionService(private val context: Context) {
-    private val apiKey = "" // Move to BuildConfig or secure storage
+    private val apiKey = "" // TODO: Move to BuildConfig or secure storage.
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -25,29 +28,31 @@ class TagSuggestionService(private val context: Context) {
     private val gson = Gson()
     private val prefs: SharedPreferences = context.getSharedPreferences("tag_suggestions", Context.MODE_PRIVATE)
 
-    // Rate limiting
+    // Rate limiting: 10 requests per minute.
     private val requestWindowMs = 60000 // 1 minute
     private val maxRequestsPerWindow = 10
     private var requestTimestamps = mutableListOf<Long>()
 
-    // Cache
+    // Cache expiry set to 24 hours.
     private val cacheExpiryMs = 24 * 60 * 60 * 1000 // 24 hours
 
     init {
-        // Load previous request timestamps
+        // Load and clean up previous request timestamps.
         val savedTimestamps = prefs.getString("request_timestamps", null)
         if (savedTimestamps != null) {
             val type = object : TypeToken<List<Long>>() {}.type
             requestTimestamps = gson.fromJson(savedTimestamps, type)
-            // Clean up old timestamps
             val now = System.currentTimeMillis()
             requestTimestamps = requestTimestamps.filter { now - it < requestWindowMs }.toMutableList()
             saveRequestTimestamps()
         }
     }
 
+    /**
+     * Suggest tags based on user input and a list of existing tags.
+     */
     suspend fun suggestTags(userInput: String, existingTags: List<String>): List<String> {
-        // First check cache
+        // Check for cached suggestions.
         val cacheKey = generateCacheKey(userInput, existingTags)
         val cachedResult = getCachedSuggestions(cacheKey)
         if (cachedResult != null) {
@@ -55,17 +60,16 @@ class TagSuggestionService(private val context: Context) {
             return cachedResult
         }
 
-        // Check rate limit
+        // Enforce rate limiting.
         if (!checkRateLimit()) {
             Log.w(TAG, "Rate limit exceeded for tag suggestions")
             return emptyList()
         }
 
-        // Make API request
+        // Make the API request.
         return withContext(Dispatchers.IO) {
             try {
                 val suggestions = makeApiRequest(userInput, existingTags)
-                // Cache the result
                 if (suggestions.isNotEmpty()) {
                     cacheSuggestions(cacheKey, suggestions)
                 }
@@ -77,6 +81,9 @@ class TagSuggestionService(private val context: Context) {
         }
     }
 
+    /**
+     * Makes an API call to OpenAI for tag suggestions.
+     */
     private fun makeApiRequest(userInput: String, existingTags: List<String>): List<String> {
         val json = gson.toJson(ChatCompletionRequest(
             model = "gpt-3.5-turbo",
@@ -113,38 +120,39 @@ class TagSuggestionService(private val context: Context) {
             val responseBody = response.body?.string() ?: ""
             val completionResponse = gson.fromJson(responseBody, OpenAIResponse::class.java)
 
-            // Record the request timestamp for rate limiting
-            addRequestTimestamp()
-
-            // Parse the response
             val tagsText = completionResponse.choices.firstOrNull()?.message?.content ?: ""
             Log.d(TAG, "Parsed tag text: $tagsText")
-            return tagsText
-                .split(",")
+            return tagsText.split(",")
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
         }
     }
 
+    /**
+     * Generates a cache key from user input and existing tags.
+     */
     private fun generateCacheKey(userInput: String, existingTags: List<String>): String {
         val normalizedInput = userInput.trim().lowercase()
         val normalizedTags = existingTags.map { it.trim().lowercase() }.sorted().joinToString(",")
         return "$normalizedInput|$normalizedTags"
     }
 
+    /**
+     * Retrieves suggestions from cache if available and not expired.
+     */
     private fun getCachedSuggestions(cacheKey: String): List<String>? {
         val cachedData = prefs.getString("cache_$cacheKey", null) ?: return null
         val timestamp = prefs.getLong("cache_time_$cacheKey", 0)
-
-        // Check if cache is expired
         if (System.currentTimeMillis() - timestamp > cacheExpiryMs) {
             return null
         }
-
         val type = object : TypeToken<List<String>>() {}.type
         return gson.fromJson(cachedData, type)
     }
 
+    /**
+     * Caches suggestions along with the current timestamp.
+     */
     private fun cacheSuggestions(cacheKey: String, suggestions: List<String>) {
         prefs.edit()
             .putString("cache_$cacheKey", gson.toJson(suggestions))
@@ -152,6 +160,9 @@ class TagSuggestionService(private val context: Context) {
             .apply()
     }
 
+    /**
+     * Checks if the rate limit has been reached.
+     */
     @Synchronized
     private fun checkRateLimit(): Boolean {
         val now = System.currentTimeMillis()
@@ -162,16 +173,16 @@ class TagSuggestionService(private val context: Context) {
         if (requestTimestamps.size >= maxRequestsPerWindow) {
             return false
         }
+
+        // Add the current timestamp BEFORE making the request
+        requestTimestamps.add(now)
+        saveRequestTimestamps()
         return true
     }
 
-    @Synchronized
-    private fun addRequestTimestamp() {
-        val now = System.currentTimeMillis()
-        requestTimestamps.add(now)
-        saveRequestTimestamps()
-    }
-
+    /**
+     * Persists request timestamps to shared preferences.
+     */
     private fun saveRequestTimestamps() {
         prefs.edit()
             .putString("request_timestamps", gson.toJson(requestTimestamps))
@@ -183,7 +194,7 @@ class TagSuggestionService(private val context: Context) {
     }
 }
 
-// Data classes for OpenAI API
+// Data classes for OpenAI API communication.
 data class ChatCompletionRequest(
     val model: String,
     val messages: List<ChatMessage>,

@@ -8,6 +8,9 @@ import androidx.room.TypeConverters
 import com.rs.photoshare.models.ArtPiece
 import com.rs.photoshare.models.DownloadedImage
 
+/**
+ * Main Room database for ArtPiece and DownloadedImage entities.
+ */
 @Database(
     entities = [ArtPiece::class, DownloadedImage::class],
     version = 2,  // bumped version
@@ -23,9 +26,12 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        /**
+         * Returns a singleton instance of AppDatabase.
+         */
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                // Use fallbackToDestructiveMigration() for now
+                // Use fallbackToDestructiveMigration() for now.
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,

@@ -248,34 +248,10 @@ class ImageUploadManager(
         tagCheckboxes.add(customTagCheckbox)
         tagLayout.addView(customTagCheckbox)
 
-        // Add AI tag suggestion button
-        val suggestTagsButton = Button(context).apply {
-            text = "Get AI Tag Suggestions"
-            setOnClickListener {
-                val title = titleInput.text.toString().trim()
-                val description = descriptionInput.text.toString().trim()
-
-                if (title.isEmpty() && description.isEmpty()) {
-                    Toast.makeText(context, "Please enter a title or description first", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-
-                // Add a special placeholder for AI tags
-                selectedTags.add("AI_TAG_PLACEHOLDER")
-
-                // Make sure custom tag input is visible for the AI suggestion result
-                customTagInput.visibility = View.VISIBLE
-
-                // Show the tag suggestion fragment
-                showTagSuggestionFragment(title, description)
-            }
-        }
-
         layout.addView(titleInput)
         layout.addView(descriptionInput)
         layout.addView(tagLayout)
         layout.addView(customTagInput)
-        layout.addView(suggestTagsButton)
 
         val dialog = AlertDialog.Builder(context)
             .setTitle("Add Art Piece Details")
@@ -455,30 +431,34 @@ class ImageUploadManager(
         val imageUri = imageUri ?: return
         val artId = UUID.randomUUID().toString()
 
+        // Create new ArtPiece object first
+        val newArtPiece = ArtPiece(
+            artId = artId,
+            title = title,
+            description = description,
+            imageUrl = "",  // This will be filled after upload
+            tags = tags,
+            creatorId = auth.currentUser?.uid ?: "unknown",
+            timestamp = System.currentTimeMillis(),
+            likes = 0,
+            dislikes = 0,
+            likedBy = listOf(),
+            dislikedBy = listOf()
+        )
+
         cloudinaryManager.uploadImageFromUri(
             uri = imageUri,
-            artId = artId,
+            artPiece = newArtPiece,  // Pass the entire ArtPiece object
             onSuccess = { cloudinaryUrl ->
                 // Keep a local thumbnail for preview
                 val thumbnailFile = createLocalThumbnail(imageUri, artId)
 
-                val newArtPiece = ArtPiece(
-                    artId = artId,
-                    title = title,
-                    description = description,
-                    imageUrl = cloudinaryUrl,  // Store Cloudinary URL
-                    tags = tags,
-                    creatorId = auth.currentUser?.uid ?: "unknown",
-                    timestamp = System.currentTimeMillis(),
-                    likes = 0,
-                    dislikes = 0,
-                    likedBy = listOf(),
-                    dislikedBy = listOf()
-                )
+                // Update ArtPiece with the Cloudinary URL
+                val finalArtPiece = newArtPiece.copy(imageUrl = cloudinaryUrl)
 
                 // Save metadata locally with Cloudinary URL
-                saveArtPieceMetadata(newArtPiece, thumbnailFile?.absolutePath)
-                onArtPieceUploaded(newArtPiece)
+                saveArtPieceMetadata(finalArtPiece, thumbnailFile?.absolutePath)
+                onArtPieceUploaded(finalArtPiece)
                 progressBar?.visibility = View.GONE
             },
             onError = { errorMessage ->

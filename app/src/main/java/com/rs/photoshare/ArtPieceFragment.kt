@@ -32,6 +32,7 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
     private lateinit var authManager: AuthManager
     private var newImageUri: Uri? = null
 
+    // Launch image picker and handle result
     private val imagePickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == android.app.Activity.RESULT_OK) {
@@ -58,35 +59,36 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         val downloadButton = view.findViewById<Button>(R.id.downloadButton)
         val backButton = view.findViewById<Button>(R.id.backButton)
 
+
+        // Set post data
         titleTextView.text = artPiece.title
         descriptionTextView.text = artPiece.description
         tagTextView.text = artPiece.tags.firstOrNull() ?: "No Tag"
 
-        // Load image based on source
+        // Load image from URL or local file
         if (artPiece.imageUrl.startsWith("http")) {
             Picasso.get().load(artPiece.imageUrl).into(imageView)
         } else {
             imageView.setImageBitmap(BitmapFactory.decodeFile(artPiece.imageUrl))
         }
 
+        // Hide edit/delete for non-owners
         val currentUserId = authManager.getCurrentUserId()
         if (artPiece.creatorId != currentUserId) {
             editButton.visibility = View.GONE
             deleteButton.visibility = View.GONE
-            // Optionally, you might show downloadButton for other users as well.
         }
 
+        // Set button listeners
         editButton.setOnClickListener { showEditDialog() }
         deleteButton.setOnClickListener { showDeleteConfirmationDialog() }
         downloadButton.setOnClickListener { downloadImage() }
-        backButton.setOnClickListener {
-            findNavController().navigateUp()
-        }
+        backButton.setOnClickListener { findNavController().navigateUp() }
 
-        setupRatingButtons()
         return view
     }
 
+    // Called when user selects tags from the suggestion fragment
     override fun onTagsSelected(tags: List<String>) {
         if (tags.isNotEmpty()) {
             val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
@@ -102,6 +104,7 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         }
     }
 
+    // Show a dialog for editing title, description, image, and tags
     private fun showEditDialog() {
         val context = requireContext()
         val layout = LinearLayout(context).apply {
@@ -124,6 +127,7 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
             text = "Suggest Tags"
             setOnClickListener { openTagSuggestions() }
         }
+
         layout.addView(titleInput)
         layout.addView(descriptionInput)
         layout.addView(changeImageButton)
@@ -145,24 +149,23 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
             .show()
     }
 
+    // Open gallery to pick a new image
     private fun openImagePicker() {
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         imagePickerLauncher.launch(intent)
     }
 
+    // Open tag suggestion screen
     private fun openTagSuggestions() {
-        // Set up the callback to receive tags back from the fragment
         TagSuggestionFragment.setTagSelectionCallback(this)
-
-        // Use Navigation Component to navigate to the fragment
         val bundle = Bundle().apply {
             putString("inputText", artPiece.title + ": " + artPiece.description)
-            // Pass existing tags
             putStringArray("selectedTags", artPiece.tags.toTypedArray())
         }
         findNavController().navigate(R.id.tagSuggestionFragment, bundle)
     }
 
+    // Save updated post data and replace image if changed
     private fun updatePost(newTitle: String, newDescription: String) {
         val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
         if (metadataFile.exists()) {
@@ -191,6 +194,7 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         }
     }
 
+    // Save selected image from URI to internal storage
     private fun saveImageLocally(uri: Uri, artId: String): String? {
         val imageFile = File(requireContext().filesDir, "art_$artId.jpg")
         return try {
@@ -206,9 +210,8 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         }
     }
 
-    // New function: downloadImage()
+    // Download image and save as a DownloadedImage record
     private fun downloadImage() {
-        // Only download if the image URL is remote.
         if (!artPiece.imageUrl.startsWith("http")) {
             Toast.makeText(requireContext(), "Image is already stored locally", Toast.LENGTH_SHORT).show()
             return
@@ -216,17 +219,13 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Download the bitmap synchronously using Picasso.
-                val bitmap = com.squareup.picasso.Picasso.get().load(artPiece.imageUrl).get()
-
-                // Generate a unique file name and save the image locally.
+                val bitmap = Picasso.get().load(artPiece.imageUrl).get()
                 val fileName = "download_${System.currentTimeMillis()}.jpg"
                 val localFile = File(requireContext().filesDir, fileName)
                 FileOutputStream(localFile).use { outputStream ->
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
                 }
 
-                // Create a new DownloadedImage entry.
                 val downloadedImage = com.rs.photoshare.models.DownloadedImage(
                     artId = artPiece.artId,
                     localPath = localFile.absolutePath,
@@ -234,7 +233,6 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
                     timestamp = System.currentTimeMillis()
                 )
 
-                // Insert the new DownloadedImage entry into the downloaded_images table.
                 val db = com.rs.photoshare.data.AppDatabase.getDatabase(requireContext())
                 db.downloadedImageDao().insertDownloadedImage(downloadedImage)
 
@@ -249,6 +247,7 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         }
     }
 
+    // Show delete confirmation dialog
     private fun showDeleteConfirmationDialog() {
         AlertDialog.Builder(requireContext())
             .setTitle("Delete Post")
@@ -258,6 +257,7 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
             .show()
     }
 
+    // Delete post metadata and local image
     private fun deletePost() {
         if (!artPiece.imageUrl.startsWith("http")) {
             File(artPiece.imageUrl).delete()
@@ -271,23 +271,8 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
         findNavController().navigateUp()
     }
 
-    private fun setupRatingButtons() {
-        val likeButton = view?.findViewById<ImageButton>(R.id.likeButtonDetail)
-        val dislikeButton = view?.findViewById<ImageButton>(R.id.dislikeButtonDetail)
-        val likeCount = view?.findViewById<TextView>(R.id.likeCountDetail)
-        val dislikeCount = view?.findViewById<TextView>(R.id.dislikeCountDetail)
-        likeCount?.text = artPiece.likes.toString()
-        dislikeCount?.text = artPiece.dislikes.toString()
-        val currentUserId = authManager.getCurrentUserId()
-        if (artPiece.likedBy.contains(currentUserId)) {
-            likeButton?.setImageResource(R.drawable.baseline_thumb_up_off_alt_24)
-        } else if (artPiece.dislikedBy.contains(currentUserId)) {
-            dislikeButton?.setImageResource(R.drawable.baseline_thumb_down_off_alt_24)
-        }
-        likeButton?.setOnClickListener { updateRating(true) }
-        dislikeButton?.setOnClickListener { updateRating(false) }
-    }
 
+    // Update like/dislike status and persist changes
     private fun updateRating(isLike: Boolean) {
         val currentUserId = authManager.getCurrentUserId()
         val metadataFile = File(requireContext().filesDir, "art_${artPiece.artId}.json")
@@ -295,6 +280,7 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
             Toast.makeText(requireContext(), "Cannot update rating for this post", Toast.LENGTH_SHORT).show()
             return
         }
+
         val likedBy = artPiece.likedBy.toMutableList()
         val dislikedBy = artPiece.dislikedBy.toMutableList()
         var likes = artPiece.likes
@@ -333,25 +319,13 @@ class ArtPieceFragment : Fragment(), TagSuggestionFragment.TagSelectionCallback 
             dislikedBy = dislikedBy
         )
         metadataFile.writeText(Gson().toJson(updatedArtPiece))
-        view?.findViewById<TextView>(R.id.likeCountDetail)?.text = likes.toString()
-        view?.findViewById<TextView>(R.id.dislikeCountDetail)?.text = dislikes.toString()
-        val likeButton = view?.findViewById<ImageButton>(R.id.likeButtonDetail)
-        val dislikeButton = view?.findViewById<ImageButton>(R.id.dislikeButtonDetail)
-        if (likedBy.contains(currentUserId)) {
-            likeButton?.setImageResource(R.drawable.baseline_thumb_up_off_alt_24)
-            dislikeButton?.setImageResource(R.drawable.baseline_thumb_down_24)
-        } else if (dislikedBy.contains(currentUserId)) {
-            likeButton?.setImageResource(R.drawable.baseline_thumb_up_24)
-            dislikeButton?.setImageResource(R.drawable.baseline_thumb_down_off_alt_24)
-        } else {
-            likeButton?.setImageResource(R.drawable.baseline_thumb_up_24)
-            dislikeButton?.setImageResource(R.drawable.baseline_thumb_down_24)
-        }
+
         artPiece = updatedArtPiece
         (activity as? MainActivity)?.refreshArtPieces()
     }
 
     companion object {
+        // Create fragment with bundled ArtPiece
         fun newInstance(artPiece: ArtPiece) = ArtPieceFragment().apply {
             arguments = Bundle().apply {
                 putParcelable("artPiece", artPiece)

@@ -11,6 +11,7 @@ import com.rs.photoshare.models.ArtPiece
 import com.squareup.picasso.Picasso
 import java.io.File
 
+// Adapter for displaying a list of ArtPiece items in a RecyclerView.
 class ArtPieceAdapter(
     private var artPieces: List<ArtPiece>,
     private val onItemClick: (ArtPiece) -> Unit,
@@ -18,11 +19,13 @@ class ArtPieceAdapter(
     private val onDislikeClick: (ArtPiece) -> Unit
 ) : RecyclerView.Adapter<ArtPieceAdapter.ArtPieceViewHolder>() {
 
+    // Update the adapter's list and refresh the view.
     fun updateList(newList: List<ArtPiece>) {
         artPieces = newList
         notifyDataSetChanged()
     }
 
+    // ViewHolder class for an individual ArtPiece item.
     class ArtPieceViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val titleTextView: TextView = itemView.findViewById(R.id.artPieceTitle)
         private val descriptionTextView: TextView = itemView.findViewById(R.id.artPieceDescription)
@@ -33,6 +36,7 @@ class ArtPieceAdapter(
         private val likeCount: TextView = itemView.findViewById(R.id.likeCount)
         private val dislikeCount: TextView = itemView.findViewById(R.id.dislikeCount)
 
+        // Bind ArtPiece data to UI elements.
         fun bind(
             artPiece: ArtPiece,
             onItemClick: (ArtPiece) -> Unit,
@@ -42,7 +46,7 @@ class ArtPieceAdapter(
             titleTextView.text = artPiece.title
             descriptionTextView.text = artPiece.description
 
-            // Display multiple tags if present
+            // Display tags or fallback text.
             val tagsText = if (artPiece.tags.size > 1) {
                 artPiece.tags.joinToString(", ")
             } else {
@@ -50,33 +54,31 @@ class ArtPieceAdapter(
             }
             tagTextView.text = tagsText
 
-            // Load image from Cloudinary URL or local file
+            // Load image from URL or local path.
             if (artPiece.imageUrl.startsWith("http")) {
-                // It's a Cloudinary URL
                 Picasso.get().load(artPiece.imageUrl).into(imageView)
             } else {
-                // It's a local file path from the old system
                 Picasso.get().load(File(artPiece.imageUrl)).into(imageView)
             }
 
-            // Set like/dislike counts
+            // Set like/dislike counts.
             likeCount.text = artPiece.likes.toString()
             dislikeCount.text = artPiece.dislikes.toString()
 
-            // Visual indication of user's rating (if you add current user's ID to likedBy/dislikedBy)
+            // Update icons based on user interaction.
             val currentUserId = AuthManager().getCurrentUserId()
             if (artPiece.likedBy.contains(currentUserId)) {
-                likeButton.setImageResource(R.drawable.baseline_thumb_up_24) // Replace with thumbs up filled
-                dislikeButton.setImageResource(R.drawable.baseline_thumb_down_24) // Default dislike icon
+                likeButton.setImageResource(R.drawable.baseline_thumb_up_24)
+                dislikeButton.setImageResource(R.drawable.baseline_thumb_down_24)
             } else if (artPiece.dislikedBy.contains(currentUserId)) {
-                likeButton.setImageResource(R.drawable.baseline_thumb_up_off_alt_24) // Default like icon
-                dislikeButton.setImageResource(R.drawable.baseline_thumb_down_off_alt_24) // Replace with thumbs down filled
+                likeButton.setImageResource(R.drawable.baseline_thumb_up_off_alt_24)
+                dislikeButton.setImageResource(R.drawable.baseline_thumb_down_off_alt_24)
             } else {
-                likeButton.setImageResource(R.drawable.baseline_thumb_up_24) // Default like icon
-                dislikeButton.setImageResource(R.drawable.baseline_thumb_down_24) // Default dislike icon
+                likeButton.setImageResource(R.drawable.baseline_thumb_up_24)
+                dislikeButton.setImageResource(R.drawable.baseline_thumb_down_24)
             }
 
-            // Set up click listeners
+            // Set click listeners.
             itemView.setOnClickListener { onItemClick(artPiece) }
             likeButton.setOnClickListener { onLikeClick(artPiece) }
             dislikeButton.setOnClickListener { onDislikeClick(artPiece) }

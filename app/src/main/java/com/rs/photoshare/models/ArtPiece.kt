@@ -5,6 +5,7 @@ import android.os.Parcelable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+// Represents an art piece stored in Room DB; implements Parcelable.
 @Entity(tableName = "art_pieces")
 data class ArtPiece(
     @PrimaryKey val artId: String = "",
@@ -20,6 +21,7 @@ data class ArtPiece(
     val likedBy: List<String> = emptyList(),
     val dislikedBy: List<String> = emptyList()
 ) : Parcelable {
+    // Recreates ArtPiece from a Parcel.
     constructor(parcel: Parcel) : this(
         artId = parcel.readString() ?: "",
         title = parcel.readString() ?: "",
@@ -35,6 +37,7 @@ data class ArtPiece(
         dislikedBy = parcel.createStringArrayList() ?: emptyList()
     )
 
+    // Writes ArtPiece properties to a Parcel.
     override fun writeToParcel(parcel: Parcel, flags: Int) {
         parcel.writeString(artId)
         parcel.writeString(title)
@@ -50,8 +53,10 @@ data class ArtPiece(
         parcel.writeStringList(dislikedBy)
     }
 
+    // No special contents.
     override fun describeContents(): Int = 0
 
+    // Parcelable.Creator for creating ArtPiece instances.
     companion object CREATOR : Parcelable.Creator<ArtPiece> {
         override fun createFromParcel(parcel: Parcel): ArtPiece {
             return ArtPiece(parcel)
@@ -62,7 +67,7 @@ data class ArtPiece(
         }
     }
 
-    // Helper function to get the rating score (likes - dislikes)
+    // Returns the rating score (likes minus dislikes).
     fun getRatingScore(): Int {
         return likes - dislikes
     }

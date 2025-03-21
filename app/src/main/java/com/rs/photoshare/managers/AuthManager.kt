@@ -4,12 +4,15 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.rs.photoshare.models.User
 
+// AuthManager handles user registration, login, and logout.
 class AuthManager {
 
+    // FirebaseAuth instance.
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    // Firestore instance.
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 
-    // Register new user and save to Firestore
+    // Register a new user and save user data to Firestore.
     fun registerUser(
         email: String,
         password: String,
@@ -22,7 +25,6 @@ class AuthManager {
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
                     val userId = auth.currentUser?.uid ?: return@addOnCompleteListener
-
                     val newUser = User(
                         userId = userId,
                         name = name,
@@ -30,21 +32,16 @@ class AuthManager {
                         profilePictureUrl = profilePictureUrl,
                         uploadedArtPiece = emptyList<String>() // Updated field
                     )
-
                     firestore.collection("users").document(userId).set(newUser)
-                        .addOnSuccessListener {
-                            onSuccess(userId)
-                        }
-                        .addOnFailureListener { exception ->
-                            onFailure(exception)
-                        }
+                        .addOnSuccessListener { onSuccess(userId) }
+                        .addOnFailureListener { exception -> onFailure(exception) }
                 } else {
                     task.exception?.let { onFailure(it) }
                 }
             }
     }
 
-    // Login existing user
+    // Log in an existing user.
     fun loginUser(
         email: String,
         password: String,
@@ -62,12 +59,12 @@ class AuthManager {
             }
     }
 
-    // Get currently logged-in user ID (null if no one is logged in)
+    // Get the current user ID (null if not logged in).
     fun getCurrentUserId(): String? {
         return auth.currentUser?.uid
     }
 
-    // Log out user
+    // Log out the current user.
     fun logout() {
         auth.signOut()
     }

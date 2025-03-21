@@ -15,7 +15,6 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
-import androidx.navigation.Navigation.findNavController
 import androidx.navigation.fragment.findNavController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -25,11 +24,17 @@ import java.io.FileOutputStream
 
 class UserProfileFragment : Fragment() {
 
+    // Firebase instances
     private lateinit var auth: FirebaseAuth
     private lateinit var firestore: FirebaseFirestore
+
+    // Currently logged-in user data
     private var currentUser: User? = null
+
+    // Selected profile image from gallery
     private var newProfileImageUri: Uri? = null
 
+    // UI elements
     private lateinit var profileImageView: ImageView
     private lateinit var userNameTextView: TextView
     private lateinit var editNameButton: Button
@@ -37,6 +42,7 @@ class UserProfileFragment : Fragment() {
     private lateinit var saveButton: Button
     private lateinit var cancelButton: Button
 
+    // Register image picker launcher
     private val imagePickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == android.app.Activity.RESULT_OK) {
@@ -47,6 +53,7 @@ class UserProfileFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Initialize Firebase
         auth = FirebaseAuth.getInstance()
         firestore = FirebaseFirestore.getInstance()
     }
@@ -58,6 +65,7 @@ class UserProfileFragment : Fragment() {
     ): View? {
         val view = inflater.inflate(R.layout.fragment_user_profile, container, false)
 
+        // Bind UI elements
         profileImageView = view.findViewById(R.id.profileImageView)
         userNameTextView = view.findViewById(R.id.userNameTextView)
         editNameButton = view.findViewById(R.id.editNameButton)
@@ -65,7 +73,7 @@ class UserProfileFragment : Fragment() {
         saveButton = view.findViewById(R.id.saveButton)
         cancelButton = view.findViewById(R.id.cancelButton)
 
-        // Load user data
+        // Load user data from Firestore
         auth.currentUser?.uid?.let { userId ->
             firestore.collection("users").document(userId).get()
                 .addOnSuccessListener { document ->
@@ -75,17 +83,19 @@ class UserProfileFragment : Fragment() {
                 }
         }
 
+        // Set up button actions
         editNameButton.setOnClickListener { showEditNameDialog() }
         changeProfileImageButton.setOnClickListener { openImagePicker() }
         saveButton.setOnClickListener { saveUserProfile() }
         cancelButton.setOnClickListener {
-            // Instead of popping the fragment manager manually:
+            // Navigate back
             findNavController().navigateUp()
         }
 
         return view
     }
 
+    // Show dialog to edit the user's display name
     private fun showEditNameDialog() {
         val context = requireContext()
         val input = EditText(context).apply {
@@ -106,18 +116,20 @@ class UserProfileFragment : Fragment() {
             .show()
     }
 
+    // Open gallery to pick a new profile image
     private fun openImagePicker() {
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         imagePickerLauncher.launch(intent)
     }
 
+    // Save updated user profile to Firestore
     private fun saveUserProfile() {
         val userId = auth.currentUser?.uid ?: return
         val newName = userNameTextView.text.toString().trim()
 
         var newProfileImagePath = currentUser?.profilePictureUrl ?: ""
 
-        // Save new profile picture if selected
+        // If a new image was selected, save it locally
         newProfileImageUri?.let { uri ->
             val savedPath = saveProfileImageLocally(uri, userId)
             if (savedPath != null) {
@@ -128,6 +140,7 @@ class UserProfileFragment : Fragment() {
             }
         }
 
+        // Create updated user object
         val updatedUser = User(
             userId = userId,
             name = newName,
@@ -136,14 +149,15 @@ class UserProfileFragment : Fragment() {
             uploadedArtPiece = currentUser?.uploadedArtPiece ?: emptyList()
         )
 
+        // Show progress message
         Toast.makeText(context, "Saving profile...", Toast.LENGTH_SHORT).show()
 
+        // Save to Firestore
         firestore.collection("users").document(userId).set(updatedUser)
             .addOnSuccessListener {
-                // Success
+                // Show success message
                 Toast.makeText(requireContext(), "Profile updated successfully", Toast.LENGTH_SHORT).show()
-
-                // Force navigation back after a small delay
+                // Navigate back with slight delay
                 Handler(Looper.getMainLooper()).postDelayed({
                     findNavController().navigateUp()
                 }, 500)
@@ -154,6 +168,7 @@ class UserProfileFragment : Fragment() {
             }
     }
 
+    // Save image from Uri to internal storage
     private fun saveProfileImageLocally(uri: Uri, userId: String): String? {
         val imageFile = File(requireContext().filesDir, "profile_$userId.jpg")
         return try {
@@ -169,6 +184,7 @@ class UserProfileFragment : Fragment() {
         }
     }
 
+    // Load the profile image from internal storage if available
     private fun loadProfileImage(imageFileName: String?) {
         if (!imageFileName.isNullOrEmpty()) {
             val imageFile = File(requireContext().filesDir, imageFileName)

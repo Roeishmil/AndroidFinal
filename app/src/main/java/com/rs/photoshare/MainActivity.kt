@@ -23,6 +23,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var artPiecesRecyclerView: RecyclerView
     private lateinit var artPieceAdapter: ArtPieceAdapter
     private lateinit var imageUploadManager: ImageUploadManager
+    private lateinit var cloudinaryRepository: CloudinaryRepository
 
     // Filter UI
     private lateinit var tagFilterLayout: LinearLayout
@@ -45,27 +46,24 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.main_activity)
         CloudinaryManager.initialize(this)
 
-        // --- 1) Find Views ---
         val userNameText: TextView = findViewById(R.id.userNameText)
         val logoutButton: Button = findViewById(R.id.logoutButton)
         val uploadArtButton: Button = findViewById(R.id.uploadArtButton)
         val clearPostsButton: Button = findViewById(R.id.clearPostsButton)
         val profileButton: Button = findViewById(R.id.profileButton)
         val myArtButton: Button = findViewById(R.id.myArtButton)
-        val downloadedImagesButton: Button = findViewById(R.id.downloadedImagesButton) // NEW button
+        val downloadedImagesButton: Button = findViewById(R.id.downloadedImagesButton)
+        cloudinaryRepository = CloudinaryRepository(this)
 
-        // Filter UI
         filterContainer = findViewById(R.id.filterContainer)
         tagFilterLayout = findViewById(R.id.tagFilterLayout)
         applyFilterButton = findViewById(R.id.applyFilterButton)
         clearFilterButton = findViewById(R.id.clearFilterButton)
         toggleFiltersButton = findViewById(R.id.toggleFiltersButton)
 
-        // --- 2) Initialize Room Database + DAO ---
         val database = AppDatabase.getDatabase(this)
         artPieceDao = database.artPieceDao()
 
-        // --- 3) Set up RecyclerView ---
         artPiecesRecyclerView = findViewById(R.id.artPiecesRecyclerView)
         artPiecesRecyclerView.layoutManager = LinearLayoutManager(this)
 
@@ -79,13 +77,11 @@ class MainActivity : AppCompatActivity() {
             updateRecyclerView()
         }
 
-        // --- 4) Set up Image Upload Manager ---
         imageUploadManager = ImageUploadManager(
             context = this,
             auth = auth,
             progressBar = findViewById(R.id.progressBar),
             onArtPieceUploaded = { artPiece ->
-                // Save to Room and update the local list
                 CoroutineScope(Dispatchers.IO).launch {
                     artPieceDao.insertArtPiece(artPiece)
                     withContext(Dispatchers.Main) {
@@ -98,7 +94,6 @@ class MainActivity : AppCompatActivity() {
             fragmentManager = supportFragmentManager
         )
 
-        // --- 5) Button Listeners ---
         profileButton.setOnClickListener { openUserProfileFragment() }
         myArtButton.setOnClickListener { openUserArtFragment() }
         logoutButton.setOnClickListener {
@@ -111,15 +106,12 @@ class MainActivity : AppCompatActivity() {
         }
         clearPostsButton.setOnClickListener { clearAllLocalArtPieces() }
 
-        // **Navigate to DownloadedImagesFragment** (must be in nav_graph.xml)
         downloadedImagesButton.setOnClickListener {
             findNavController(R.id.nav_host_fragment).navigate(R.id.downloadedImagesFragment)
         }
 
-        // --- 6) Load Art Pieces from Room (local storage) ---
         loadArtPieces()
 
-        // --- 7) Load User Info (via Firestore) ---
         auth.currentUser?.uid?.let { userId ->
             firestore.collection("users").document(userId).get()
                 .addOnSuccessListener { document ->
@@ -127,7 +119,6 @@ class MainActivity : AppCompatActivity() {
                 }
         }
 
-        // --- 8) Navigation: Show/Hide UI based on Destination ---
         val navController = findNavController(R.id.nav_host_fragment)
         navController.addOnDestinationChangedListener { _, destination, _ ->
             when (destination.id) {
@@ -138,31 +129,75 @@ class MainActivity : AppCompatActivity() {
                 else -> {
                     hideMainButtons()
                     hideRecyclerView()
+                    hideFilterContainer()
                 }
             }
         }
     }
 
-    /**
-     * Loads art pieces from the local Room database.
-     */
     private fun loadArtPieces() {
+        val progressBar = findViewById<ProgressBar>(R.id.progressBar)
+        progressBar.visibility = View.VISIBLE
+
         CoroutineScope(Dispatchers.IO).launch {
-            val artPiecesFromDb = artPieceDao.getAllArtPieces()
-            localArtPieces.clear()
-            localArtPieces.addAll(artPiecesFromDb)
-            withContext(Dispatchers.Main) {
-                updateRecyclerView()
-                setupTagFilters()
+            try {
+                // First, get all art pieces from the local database
+                val localArtPiecesFromDb = artPieceDao.getAllArtPieces()
+                val localArtPieceMap = localArtPiecesFromDb.associateBy { it.artId }
+
+                // Then fetch all art pieces from Cloudinary
+                val cloudinaryArtPieces = cloudinaryRepository.fetchAllArtPiecesAsync()
+
+                // Merge both sources, preferring local versions which may have more data (like likedBy)
+                val mergedArtPieces = mutableListOf<ArtPiece>()
+
+                for (cloudinaryArtPiece in cloudinaryArtPieces) {
+                    val localArtPiece = localArtPieceMap[cloudinaryArtPiece.artId]
+
+                    if (localArtPiece != null) {
+                        // We have this art piece locally, use local version but update imageUrl if needed
+                        if (localArtPiece.imageUrl != cloudinaryArtPiece.imageUrl) {
+                            val updatedArtPiece = localArtPiece.copy(imageUrl = cloudinaryArtPiece.imageUrl)
+                            artPieceDao.updateArtPiece(updatedArtPiece)
+                            mergedArtPieces.add(updatedArtPiece)
+                        } else {
+                            mergedArtPieces.add(localArtPiece)
+                        }
+                    } else {
+                        // This is a new art piece from Cloudinary, add it to local DB
+                        artPieceDao.insertArtPiece(cloudinaryArtPiece)
+                        mergedArtPieces.add(cloudinaryArtPiece)
+                    }
+                }
+
+                // Update our working list
+                withContext(Dispatchers.Main) {
+                    localArtPieces.clear()
+                    localArtPieces.addAll(mergedArtPieces)
+                    updateRecyclerView()
+                    setupTagFilters()
+                    progressBar.visibility = View.GONE
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Error syncing with Cloudinary: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    // Fallback to local content only
+                    val localArtPiecesFromDb = artPieceDao.getAllArtPieces()
+                    localArtPieces.clear()
+                    localArtPieces.addAll(localArtPiecesFromDb)
+                    updateRecyclerView()
+                    setupTagFilters()
+                    progressBar.visibility = View.GONE
+                }
             }
         }
     }
 
-    /**
-     * Called (for example, from ArtPieceFragment) to refresh the art list.
-     *
-     * @param forceImageReload If true, forces the adapter to reload images.
-     */
     fun refreshArtPieces(forceImageReload: Boolean = false) {
         loadArtPieces()
         if (forceImageReload && ::artPieceAdapter.isInitialized) {
@@ -170,7 +205,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- Fragment Navigation ---
     private fun openUserProfileFragment() {
         val navController = findNavController(R.id.nav_host_fragment)
         if (navController.currentDestination?.id == R.id.userProfileFragment) return
@@ -192,10 +226,15 @@ class MainActivity : AppCompatActivity() {
         navController.navigate(R.id.artPieceFragment, bundle)
     }
 
-    // --- Show/Hide UI Helpers ---
+    private fun hideFilterContainer() {
+        filterContainer.visibility = View.GONE
+        toggleFiltersButton.text = "Show Filters"
+    }
+
+
     fun showMainButtons() {
         findViewById<Button>(R.id.uploadArtButton).visibility = View.VISIBLE
-        findViewById<Button>(R.id.clearPostsButton).visibility = View.GONE
+        findViewById<Button>(R.id.clearPostsButton).visibility = View.VISIBLE
         findViewById<Button>(R.id.myArtButton).visibility = View.VISIBLE
         findViewById<Button>(R.id.toggleFiltersButton).visibility = View.VISIBLE
         findViewById<Button>(R.id.downloadedImagesButton).visibility = View.VISIBLE
@@ -211,8 +250,6 @@ class MainActivity : AppCompatActivity() {
 
     fun showRecyclerView() {
         artPiecesRecyclerView.visibility = View.VISIBLE
-        // Don't hide the navigation host fragment completely
-        // Just make sure you're on the home fragment
         val navController = findNavController(R.id.nav_host_fragment)
         if (navController.currentDestination?.id != R.id.homeFragment) {
             navController.navigate(R.id.homeFragment)
@@ -223,14 +260,12 @@ class MainActivity : AppCompatActivity() {
         artPiecesRecyclerView.visibility = View.GONE
     }
 
-    // --- Image Upload Result ---
     private val resultLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         imageUploadManager.handleImageResult(result.resultCode, result.data)
     }
 
-    // --- Filtering and UI Helpers ---
     private fun toggleFiltersVisibility() {
         if (filterContainer.visibility == View.VISIBLE) {
             filterContainer.visibility = View.GONE
@@ -246,8 +281,6 @@ class MainActivity : AppCompatActivity() {
             artPieceAdapter.updateList(sortArtPiecesByRating(localArtPieces))
         } else {
             val filteredList = localArtPieces.filter { piece ->
-                // Current implementation only shows posts that have ANY selected tag
-                // We should ensure it filters correctly
                 piece.tags.any { tag -> selectedTags.contains(tag) }
             }
             artPieceAdapter.updateList(sortArtPiecesByRating(filteredList))
@@ -268,7 +301,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         for (tag in uniqueTags) {
-            // Skip empty tags
             if (tag.isBlank()) continue
 
             val checkBox = CheckBox(this).apply {
@@ -285,7 +317,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- Clearing and Updating Art Pieces ---
     private fun clearAllLocalArtPieces() {
         CoroutineScope(Dispatchers.IO).launch {
             localArtPieces.forEach { artPiece ->

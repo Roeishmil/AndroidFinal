@@ -13,3 +13,5 @@
 .externalNativeBuild
 .cxx
 local.properties
+# Ignore local properties file (contains sensitive credentials)
+local.properties

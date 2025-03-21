@@ -28,10 +28,12 @@ class TagSuggestionFragment : DialogFragment() {
     companion object {
         private var tagSelectionCallback: TagSelectionCallback? = null
 
+        // Static method to set the callback for tag selection
         fun setTagSelectionCallback(callback: TagSelectionCallback) {
             tagSelectionCallback = callback
         }
 
+        // Clear the callback to avoid memory leaks
         fun clearCallback() {
             tagSelectionCallback = null
         }
@@ -69,10 +71,11 @@ class TagSuggestionFragment : DialogFragment() {
         selectedTagsTextView = view.findViewById(R.id.textSelectedTags)
         confirmButton = view.findViewById(R.id.buttonConfirmTags)
 
+        // Set click listeners for buttons
         suggestButton.setOnClickListener { getSuggestions() }
         confirmButton.setOnClickListener { confirmTagSelection() }
 
-        // Auto-fill content if provided via arguments and trigger suggestions
+        // Auto-fill content if provided and trigger suggestions
         arguments?.getString("inputText")?.let { inputText ->
             postContentEditText.setText(inputText)
             getSuggestions()
@@ -97,6 +100,7 @@ class TagSuggestionFragment : DialogFragment() {
         errorTextView.visibility = android.view.View.GONE
         chipGroup.removeAllViews()
 
+        // Launch coroutine to fetch suggestions asynchronously
         lifecycleScope.launch {
             val suggestions = tagSuggestionService.suggestTags(userInput, existingTags)
             withContext(Dispatchers.Main) {
@@ -107,6 +111,8 @@ class TagSuggestionFragment : DialogFragment() {
                     return@withContext
                 }
                 chipGroup.removeAllViews()
+
+                // Populate chips with suggestions
                 suggestions.forEach { tag ->
                     val chip = Chip(requireContext()).apply {
                         text = tag
@@ -151,6 +157,7 @@ class TagSuggestionFragment : DialogFragment() {
         return tagsSet.toList()
     }
 
+    // Update the TextView showing selected tags
     private fun updateSelectedTagsView() {
         selectedTagsTextView.text = if (selectedTags.isEmpty()) {
             "No tags selected"
@@ -159,6 +166,7 @@ class TagSuggestionFragment : DialogFragment() {
         }
     }
 
+    // Confirm selected tags and return via callback
     private fun confirmTagSelection() {
         try {
             tagSelectionCallback?.onTagsSelected(selectedTags)

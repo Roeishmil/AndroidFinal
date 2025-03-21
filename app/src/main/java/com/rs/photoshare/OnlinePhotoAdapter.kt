@@ -10,29 +10,32 @@ import com.rs.photoshare.models.Photo
 import com.squareup.picasso.Picasso
 
 class OnlinePhotoAdapter(
-    private val photos: List<Photo>,
-    private val onPhotoSelected: (Photo) -> Unit
+    private val photos: List<Photo>, // List of photos to display
+    private val onPhotoSelected: (Photo) -> Unit // Callback when a photo is clicked
 ) : RecyclerView.Adapter<OnlinePhotoAdapter.PhotoViewHolder>() {
 
+    // ViewHolder class to hold item views
     class PhotoViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val imageView: ImageView = itemView.findViewById(R.id.photoImageView)
-        private val authorTextView: TextView = itemView.findViewById(R.id.photoAuthorTextView)
+        private val imageView: ImageView = itemView.findViewById(R.id.photoImageView) // Image view to show photo
+        private val authorTextView: TextView = itemView.findViewById(R.id.photoAuthorTextView) // Text view for author name
 
         fun bind(photo: Photo, onPhotoSelected: (Photo) -> Unit) {
-            // Load the JPG image using Picasso
+            // Load the image from URL using Picasso
             Picasso.get()
                 .load(photo.url)
-                .placeholder(R.drawable.placeholder_image)
-                .error(R.drawable.error_image)
+                .placeholder(R.drawable.placeholder_image) // Placeholder image during loading
+                .error(R.drawable.error_image) // Fallback image on error
                 .into(imageView)
 
-            // Show author name
+            // Set the author's name
             authorTextView.text = photo.author
 
+            // Handle item click
             itemView.setOnClickListener { onPhotoSelected(photo) }
         }
     }
 
+    // Inflate layout and create ViewHolder
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PhotoViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(
             R.layout.item_online_photo, parent, false
@@ -40,9 +43,11 @@ class OnlinePhotoAdapter(
         return PhotoViewHolder(view)
     }
 
+    // Bind data to the ViewHolder
     override fun onBindViewHolder(holder: PhotoViewHolder, position: Int) {
         holder.bind(photos[position], onPhotoSelected)
     }
 
+    // Return total number of items
     override fun getItemCount(): Int = photos.size
 }
