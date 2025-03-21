@@ -123,7 +123,7 @@ class MainActivity : AppCompatActivity() {
         auth.currentUser?.uid?.let { userId ->
             firestore.collection("users").document(userId).get()
                 .addOnSuccessListener { document ->
-                    userNameText.text = "Welcome, ${document.getString("name") ?: "User"}!"
+                    userNameText.text = "Welcome to PhotoShare!"
                 }
         }
 
@@ -195,7 +195,7 @@ class MainActivity : AppCompatActivity() {
     // --- Show/Hide UI Helpers ---
     fun showMainButtons() {
         findViewById<Button>(R.id.uploadArtButton).visibility = View.VISIBLE
-        findViewById<Button>(R.id.clearPostsButton).visibility = View.VISIBLE
+        findViewById<Button>(R.id.clearPostsButton).visibility = View.GONE
         findViewById<Button>(R.id.myArtButton).visibility = View.VISIBLE
         findViewById<Button>(R.id.toggleFiltersButton).visibility = View.VISIBLE
         findViewById<Button>(R.id.downloadedImagesButton).visibility = View.VISIBLE

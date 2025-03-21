@@ -40,7 +40,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="start|center_vertical"
             android:layout_marginStart="16dp"
-            android:text="Welcome, Roei Shmil!"
+            android:text="Welcome to PhotoShare!"
             android:textColor="@android:color/white"
             android:textSize="18sp"
             android:textStyle="bold" />
