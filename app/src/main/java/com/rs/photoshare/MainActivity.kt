@@ -330,6 +330,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // In MainActivity.kt
     fun updateArtPieceRating(artPiece: ArtPiece, isLike: Boolean) {
         val currentUserId = auth.currentUser?.uid ?: return
         val likedBy = artPiece.likedBy.toMutableList()
@@ -371,7 +372,18 @@ class MainActivity : AppCompatActivity() {
         )
 
         CoroutineScope(Dispatchers.IO).launch {
+            // Update local database
             artPieceDao.updateArtPiece(updatedArtPiece)
+
+            // Also update in Cloudinary
+            try {
+                val success = cloudinaryRepository.updateLikesAndDislikes(artPiece, isLike, currentUserId)
+                if (!success) {
+                    Log.e("MainActivity", "Failed to update likes/dislikes in Cloudinary")
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error updating likes/dislikes in Cloudinary", e)
+            }
         }
 
         val index = localArtPieces.indexOfFirst { it.artId == artPiece.artId }

@@ -88,19 +88,19 @@ class CloudinaryRepository(private val context: Context) {
             val basicAuth = "Basic " + android.util.Base64.encodeToString(credentials.toByteArray(), android.util.Base64.NO_WRAP)
             connection.setRequestProperty("Authorization", basicAuth)
 
-            // Request body - IMPORTANT CHANGES HERE
+            // Request body - Make sure to request both context and tags
             val body = JSONObject().apply {
                 put("expression", expression)
                 put("timestamp", timestamp)
                 put("api_key", API_KEY)
                 put("signature", signature)
                 put("max_results", 500)
-                // Make sure we explicitly request context
+                // Make sure we explicitly request context and tags
                 put("with_field", JSONArray().apply {
                     put("context")
                     put("tags")
                 })
-                // Return specific fields including context
+                // Return specific fields including context and tags
                 put("return_fields", JSONArray().apply {
                     put("public_id")
                     put("secure_url")
@@ -165,45 +165,64 @@ class CloudinaryRepository(private val context: Context) {
             // Debug log to see what we're getting from Cloudinary
             Log.d(TAG, "Raw resource data: ${resource.toString()}")
 
-            // Extract context metadata if available
+            // Extract context metadata - first check if context exists
             val contextObj = resource.optJSONObject("context")
 
-            // Log the context structure so we can see what's being returned
+            // Log the context structure for debugging
             if (contextObj != null) {
                 Log.d(TAG, "Context structure: ${contextObj.toString()}")
             } else {
                 Log.d(TAG, "No context found in resource")
             }
 
-            // Check both direct context and context.custom objects
-            val metadata = when {
-                contextObj != null -> {
-                    // Try direct access first
-                    if (contextObj.has("title") || contextObj.has("description")) {
-                        contextObj
-                    }
-                    // Then try custom container
-                    else if (contextObj.has("custom")) {
-                        contextObj.optJSONObject("custom") ?: JSONObject()
-                    }
-                    // Fallback
-                    else {
-                        JSONObject()
+            // FIXED: Improved metadata extraction strategy
+            // First initialize with direct title/description if available
+            var title = "Untitled"
+            var description = ""
+            var tagsString = ""
+            var creatorId = "unknown"
+            var timestamp = System.currentTimeMillis()
+            var likes = 0
+            var dislikes = 0
+
+            // Step 1: Try to get direct properties from context
+            if (contextObj != null) {
+                // Try to get title and description directly
+                if (contextObj.has("title")) {
+                    title = contextObj.getString("title")
+                }
+                if (contextObj.has("description")) {
+                    description = contextObj.getString("description")
+                }
+
+                // Step 2: Try to parse the custom field if available
+                if (contextObj.has("custom")) {
+                    val customStr = contextObj.getString("custom")
+                    Log.d(TAG, "Custom context: $customStr")
+
+                    // Parse the custom string
+                    customStr.split("|").forEach { pair ->
+                        val keyValue = pair.split("=", limit = 2)
+                        if (keyValue.size == 2) {
+                            val key = keyValue[0].trim()
+                            val value = keyValue[1].trim()
+
+                            // Update metadata based on the key
+                            when (key) {
+                                "title" -> if (title == "Untitled") title = value
+                                "description" -> if (description.isEmpty()) description = value
+                                "tags" -> tagsString = value
+                                "creator_id" -> creatorId = value
+                                "timestamp" -> timestamp = value.toLongOrNull() ?: timestamp
+                                "likes" -> likes = value.toIntOrNull() ?: likes
+                                "dislikes" -> dislikes = value.toIntOrNull() ?: dislikes
+                            }
+                        }
                     }
                 }
-                else -> JSONObject()
             }
 
-            // Extract metadata or use defaults
-            val title = metadata.optString("title", "Untitled")
-            val description = metadata.optString("description", "")
-            val tagsString = metadata.optString("tags", "")
-            val creatorId = metadata.optString("creator_id", "unknown")
-            val timestamp = metadata.optLong("timestamp", System.currentTimeMillis())
-            val likes = metadata.optInt("likes", 0)
-            val dislikes = metadata.optInt("dislikes", 0)
-
-            // Parse tags - handle both resource tags and context tags
+            // Parse tags - handle resource tags separately
             val tags = when {
                 resource.has("tags") && resource.get("tags") is JSONArray -> {
                     val tagsArray = resource.getJSONArray("tags")
@@ -240,6 +259,87 @@ class CloudinaryRepository(private val context: Context) {
             e.printStackTrace()
             return null
         }
+    }
+
+    /**
+     * Updates the metadata for an existing art piece in Cloudinary.
+     * This is particularly useful for updating likes and dislikes.
+     */
+    suspend fun updateArtPieceMetadata(artPiece: ArtPiece): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val timestamp = System.currentTimeMillis() / 1000
+
+            // Create the context string with updated metadata
+            val contextStr = "title=${artPiece.title}|description=${artPiece.description}|" +
+                    "tags=${artPiece.tags.joinToString(",")}|" +
+                    "creator_id=${artPiece.creatorId}|" +
+                    "timestamp=${artPiece.timestamp}|" +
+                    "likes=${artPiece.likes}|" +
+                    "dislikes=${artPiece.dislikes}"
+
+            // Create signature for authentication
+            val toSign = "context=$contextStr&public_id=$FOLDER_PATH/${artPiece.artId}&timestamp=$timestamp$API_SECRET"
+            val signature = generateSHA1Signature(toSign)
+
+            // Build URL for updating context metadata
+            val urlString = "https://api.cloudinary.com/v1_1/$CLOUDINARY_NAME/image/context" +
+                    "?public_id=$FOLDER_PATH/${artPiece.artId}" +
+                    "&context=$contextStr" +
+                    "&timestamp=$timestamp" +
+                    "&api_key=$API_KEY" +
+                    "&signature=$signature"
+
+            Log.d(TAG, "Updating metadata at: $urlString")
+
+            // Create connection
+            val url = URL(urlString)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "PUT"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+
+            // Get response
+            val responseCode = connection.responseCode
+            Log.d(TAG, "Update metadata response code: $responseCode")
+
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                Log.e(TAG, "HTTP error updating metadata: $responseCode, Response: $errorResponse")
+            }
+
+            return@withContext responseCode == HttpURLConnection.HTTP_OK
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating art piece metadata in Cloudinary", e)
+            return@withContext false
+        }
+    }
+
+    // In CloudinaryRepository.kt
+    suspend fun updateLikesAndDislikes(artPiece: ArtPiece, isLiked: Boolean, userId: String): Boolean {
+        val updatedArtPiece = if (isLiked) {
+            // Add user to likedBy list if not already there
+            if (!artPiece.likedBy.contains(userId)) {
+                artPiece.copy(
+                    likes = artPiece.likes + 1,
+                    likedBy = artPiece.likedBy + userId
+                )
+            } else {
+                artPiece
+            }
+        } else {
+            // Add user to dislikedBy list if not already there
+            if (!artPiece.dislikedBy.contains(userId)) {
+                artPiece.copy(
+                    dislikes = artPiece.dislikes + 1,
+                    dislikedBy = artPiece.dislikedBy + userId
+                )
+            } else {
+                artPiece
+            }
+        }
+
+        // Update metadata in Cloudinary
+        return updateArtPieceMetadata(updatedArtPiece)
     }
 
     /**

@@ -61,8 +61,12 @@ class CloudinaryManager(private val context: Context) {
             initialize(context)
         }
 
-        // Create context metadata to store with the image
-        val metadata = mapOf(
+        // FIXED: Use both direct context and custom context to ensure compatibility
+        // Direct context for title/description and custom context for all metadata
+        val directContext = "title=${artPiece.title}|description=${artPiece.description}"
+
+        // Create custom context metadata to store all metadata
+        val customContext = mapOf(
             "title" to artPiece.title,
             "description" to artPiece.description,
             "tags" to artPiece.tags.joinToString(","),
@@ -72,15 +76,22 @@ class CloudinaryManager(private val context: Context) {
             "dislikes" to artPiece.dislikes.toString()
         )
 
-        // Format context properly for Cloudinary
-        val contextParams = metadata.entries.joinToString("|") { "${it.key}=${it.value}" }
+        // Format custom context properly for Cloudinary with "custom" prefix
+        val customContextParam = "custom=" + customContext.entries.joinToString("|") { "${it.key}=${it.value}" }
+
+        // Combine both contexts
+        val contextParams = "$directContext|$customContextParam"
+
+        // Add tags directly as they should be handled separately from context metadata
+        val tags = artPiece.tags.joinToString(",")
 
         MediaManager.get().upload(imageFile.absolutePath)
             .unsigned("ml_default") // Uses an unsigned preset for security
             .option("folder", "art_pieces") // Stores images inside the "art_pieces" folder
             .option("resource_type", "image")
             .option("public_id", artPiece.artId) // Use artId as public_id for better tracking
-            .option("context", contextParams) // Add metadata directly without "custom=" prefix
+            .option("context", contextParams) // Add metadata with both direct and custom formats
+            .option("tags", tags) // Add tags separately for proper indexing
             .callback(object : UploadCallback {
                 override fun onStart(requestId: String) {
                     // Triggered when upload starts
